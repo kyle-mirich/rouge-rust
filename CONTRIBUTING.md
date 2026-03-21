@@ -1,4 +1,4 @@
-# Contributing to fast_rouge
+# Contributing to fast-rouge
 
 Thanks for contributing.
 

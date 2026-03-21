@@ -1,6 +1,6 @@
-# fast_rouge
+# fast-rouge
 
-`fast_rouge` is a Rust-powered replacement for Google's `rouge-score` Python package.
+`fast-rouge` is a Rust-powered replacement for Google's `rouge-score` Python package.
 It provides matching ROUGE-1, ROUGE-2, and ROUGE-L metrics through a PyO3 extension module,
 with fast batch APIs for large-scale evaluation workloads.
 
@@ -15,7 +15,7 @@ with fast batch APIs for large-scale evaluation workloads.
 ## Installation
 
 ```bash
-pip install fast_rouge
+pip install fast-rouge
 ```
 
 ## Usage
@@ -105,7 +105,7 @@ This repo includes a GitHub Actions pipeline in `.github/workflows/release.yml`.
 Configure PyPI trusted publishing for:
 
 - owner: `kyle-mirich`
-- repository: `fast_rouge`
+- repository: `fast-rouge`
 - workflow: `release.yml`
 - environment: `pypi`
 
