@@ -37,3 +37,18 @@ source "$HOME/.cargo/env"
 .venv/bin/maturin build --release --sdist -o dist
 .venv/bin/python -m twine check dist/*
 ```
+
+## Automated releases
+
+The repository is configured to publish from GitHub Actions on tags matching `v*`.
+
+Typical flow:
+
+```bash
+git checkout main
+git pull --ff-only
+git tag v0.1.0
+git push origin main --tags
+```
+
+PyPI publishing uses GitHub OIDC trusted publishing. No PyPI API token should be stored in the repository.

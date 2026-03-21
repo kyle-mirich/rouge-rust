@@ -91,3 +91,22 @@ Upload to PyPI:
 source "$HOME/.cargo/env"
 .venv/bin/maturin upload dist/*
 ```
+
+## GitHub Actions release flow
+
+This repo includes a GitHub Actions pipeline in `.github/workflows/release.yml`.
+
+- pushes and pull requests to `main` and `develop` build and test wheels
+- tags matching `v*` build release artifacts
+- tag builds publish to PyPI and create a GitHub Release
+
+### One-time PyPI setup
+
+Configure PyPI trusted publishing for:
+
+- owner: `kyle-mirich`
+- repository: `fast_rouge`
+- workflow: `release.yml`
+- environment: `pypi`
+
+After that, creating and pushing a tag such as `v0.1.0` will trigger publishing.
