@@ -3,7 +3,7 @@ requires = ["maturin>=1.12,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "rouge-rs"
+name = "rouge-rust"
 description = "High-performance Rust-backed ROUGE scoring for Python"
 requires-python = ">=3.8"
 readme = "README.md"
@@ -24,9 +24,9 @@ classifiers = [
 dynamic = ["version"]
 
 [project.urls]
-Homepage = "https://github.com/kyle-mirich/fast-rouge"
-Repository = "https://github.com/kyle-mirich/fast-rouge"
-Issues = "https://github.com/kyle-mirich/fast-rouge/issues"
+Homepage = "https://github.com/kyle-mirich/rouge-rust"
+Repository = "https://github.com/kyle-mirich/rouge-rust"
+Issues = "https://github.com/kyle-mirich/rouge-rust/issues"
 
 [project.optional-dependencies]
 dev = [

@@ -1,4 +1,4 @@
-# Contributing to fast-rouge
+# Contributing to rouge-rust
 
 Thanks for contributing.
 
