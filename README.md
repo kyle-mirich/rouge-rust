@@ -15,7 +15,7 @@ with fast batch APIs for large-scale evaluation workloads.
 ## Installation
 
 ```bash
-pip install fast-rouge
+pip install rouge-rs
 ```
 
 ## Usage
