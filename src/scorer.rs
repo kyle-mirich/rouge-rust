@@ -124,9 +124,25 @@ pub fn rouge_l(reference: &str, prediction: &str) -> Score {
     scores.rouge_l
 }
 
+pub fn score_all(reference: &str, prediction: &str) -> (Score, Score, Score) {
+    let reference_tokens = tokenize_tokenized(reference);
+    let prediction_tokens = tokenize_tokenized(prediction);
+    let scores = score_set(&reference_tokens, &prediction_tokens);
+
+    (scores.rouge1, scores.rouge2, scores.rouge_l)
+}
+
 pub fn rouge_n_tokens<T: AsRef<str>>(reference_tokens: &[T], prediction_tokens: &[T], n: usize) -> Score {
     if n == 0 {
         return Score::zero();
+    }
+
+    if n == 1 {
+        return rouge1_tokens(reference_tokens, prediction_tokens);
+    }
+
+    if n == 2 {
+        return rouge2_tokens(reference_tokens, prediction_tokens);
     }
 
     let reference_total = total_ngrams(reference_tokens.len(), n);
@@ -214,21 +230,21 @@ fn tokenize_cached(text: &str) -> Rc<TokenizedText> {
 }
 
 fn tokenize_tokenized(text: &str) -> TokenizedText {
-    let mut normalized = String::with_capacity(text.len());
+    let mut normalized = Vec::with_capacity(text.len());
     let mut spans = Vec::with_capacity(estimated_token_capacity(text));
     let mut token_start = None;
 
-    for character in text.chars() {
-        let output = if character.is_ascii_alphanumeric() {
-            character.to_ascii_lowercase()
+    for &byte in text.as_bytes() {
+        let output = if byte.is_ascii_alphanumeric() {
+            byte.to_ascii_lowercase()
         } else {
-            ' '
+            b' '
         };
 
         let index = normalized.len();
         normalized.push(output);
 
-        if output == ' ' {
+        if output == b' ' {
             if let Some(start) = token_start.take() {
                 spans.push((start, index));
             }
@@ -241,7 +257,10 @@ fn tokenize_tokenized(text: &str) -> TokenizedText {
         spans.push((start, normalized.len()));
     }
 
-    TokenizedText { normalized, spans }
+    TokenizedText {
+        normalized: unsafe { String::from_utf8_unchecked(normalized) },
+        spans,
+    }
 }
 
 fn estimated_token_capacity(text: &str) -> usize {
@@ -249,27 +268,22 @@ fn estimated_token_capacity(text: &str) -> usize {
 }
 
 fn score_set(reference_tokens: &TokenizedText, prediction_tokens: &TokenizedText) -> ScoreSet {
-    let reference_unigrams = ngram_counts_tokenized(reference_tokens, 1);
-    let prediction_unigrams = ngram_counts_tokenized(prediction_tokens, 1);
-    let reference_bigrams = ngram_counts_tokenized(reference_tokens, 2);
-    let prediction_bigrams = ngram_counts_tokenized(prediction_tokens, 2);
-
     ScoreSet {
-        rouge1: score_from_counts(
-            overlap_count(&reference_unigrams, &prediction_unigrams),
-            reference_tokens.len(),
-            prediction_tokens.len(),
-        ),
-        rouge2: score_from_counts(
-            overlap_count(&reference_bigrams, &prediction_bigrams),
-            total_ngrams(reference_tokens.len(), 2),
-            total_ngrams(prediction_tokens.len(), 2),
-        ),
+        rouge1: rouge1_tokenized(reference_tokens, prediction_tokens),
+        rouge2: rouge2_tokenized(reference_tokens, prediction_tokens),
         rouge_l: rouge_l_tokenized(reference_tokens, prediction_tokens),
     }
 }
 
 fn rouge_n_tokenized(reference_tokens: &TokenizedText, prediction_tokens: &TokenizedText, n: usize) -> Score {
+    if n == 1 {
+        return rouge1_tokenized(reference_tokens, prediction_tokens);
+    }
+
+    if n == 2 {
+        return rouge2_tokenized(reference_tokens, prediction_tokens);
+    }
+
     let reference_total = total_ngrams(reference_tokens.len(), n);
     let prediction_total = total_ngrams(prediction_tokens.len(), n);
 
@@ -280,6 +294,142 @@ fn rouge_n_tokenized(reference_tokens: &TokenizedText, prediction_tokens: &Token
     let reference_counts = ngram_counts_tokenized(reference_tokens, n);
     let prediction_counts = ngram_counts_tokenized(prediction_tokens, n);
     let overlap = overlap_count(&reference_counts, &prediction_counts);
+
+    score_from_counts(overlap, reference_total, prediction_total)
+}
+
+fn rouge1_tokenized(reference_tokens: &TokenizedText, prediction_tokens: &TokenizedText) -> Score {
+    let reference_total = reference_tokens.len();
+    let prediction_total = prediction_tokens.len();
+
+    if reference_total == 0 || prediction_total == 0 {
+        return Score::zero();
+    }
+
+    let mut counts =
+        HashMap::with_capacity_and_hasher(reference_total, Default::default());
+
+    for index in 0..reference_tokens.len() {
+        *counts
+            .entry(NgramKey::Unigram(reference_tokens.token(index)))
+            .or_insert(0) += 1;
+    }
+
+    let mut overlap = 0;
+
+    for index in 0..prediction_tokens.len() {
+        let key = NgramKey::Unigram(prediction_tokens.token(index));
+
+        if let Some(count) = counts.get_mut(&key) {
+            if *count > 0 {
+                *count -= 1;
+                overlap += 1;
+            }
+        }
+    }
+
+    score_from_counts(overlap, reference_total, prediction_total)
+}
+
+fn rouge2_tokenized(reference_tokens: &TokenizedText, prediction_tokens: &TokenizedText) -> Score {
+    let reference_total = total_ngrams(reference_tokens.len(), 2);
+    let prediction_total = total_ngrams(prediction_tokens.len(), 2);
+
+    if reference_total == 0 || prediction_total == 0 {
+        return Score::zero();
+    }
+
+    let mut counts =
+        HashMap::with_capacity_and_hasher(reference_total, Default::default());
+
+    for index in 0..(reference_tokens.len() - 1) {
+        *counts
+            .entry(NgramKey::Bigram(
+                reference_tokens.token(index),
+                reference_tokens.token(index + 1),
+            ))
+            .or_insert(0) += 1;
+    }
+
+    let mut overlap = 0;
+
+    for index in 0..(prediction_tokens.len() - 1) {
+        let key = NgramKey::Bigram(
+            prediction_tokens.token(index),
+            prediction_tokens.token(index + 1),
+        );
+
+        if let Some(count) = counts.get_mut(&key) {
+            if *count > 0 {
+                *count -= 1;
+                overlap += 1;
+            }
+        }
+    }
+
+    score_from_counts(overlap, reference_total, prediction_total)
+}
+
+fn rouge1_tokens<T: AsRef<str>>(reference_tokens: &[T], prediction_tokens: &[T]) -> Score {
+    let reference_total = reference_tokens.len();
+    let prediction_total = prediction_tokens.len();
+
+    if reference_total == 0 || prediction_total == 0 {
+        return Score::zero();
+    }
+
+    let mut counts =
+        HashMap::with_capacity_and_hasher(reference_total, Default::default());
+
+    for token in reference_tokens {
+        *counts.entry(NgramKey::Unigram(token.as_ref())).or_insert(0) += 1;
+    }
+
+    let mut overlap = 0;
+
+    for token in prediction_tokens {
+        let key = NgramKey::Unigram(token.as_ref());
+
+        if let Some(count) = counts.get_mut(&key) {
+            if *count > 0 {
+                *count -= 1;
+                overlap += 1;
+            }
+        }
+    }
+
+    score_from_counts(overlap, reference_total, prediction_total)
+}
+
+fn rouge2_tokens<T: AsRef<str>>(reference_tokens: &[T], prediction_tokens: &[T]) -> Score {
+    let reference_total = total_ngrams(reference_tokens.len(), 2);
+    let prediction_total = total_ngrams(prediction_tokens.len(), 2);
+
+    if reference_total == 0 || prediction_total == 0 {
+        return Score::zero();
+    }
+
+    let mut counts =
+        HashMap::with_capacity_and_hasher(reference_total, Default::default());
+
+    for window in reference_tokens.windows(2) {
+        *counts
+            .entry(NgramKey::Bigram(window[0].as_ref(), window[1].as_ref()))
+            .or_insert(0) += 1;
+    }
+
+    let mut overlap = 0;
+
+    for window in prediction_tokens.windows(2) {
+        let key = NgramKey::Bigram(window[0].as_ref(), window[1].as_ref());
+
+        if let Some(count) = counts.get_mut(&key) {
+            if *count > 0 {
+                *count -= 1;
+                overlap += 1;
+            }
+        }
+    }
 
     score_from_counts(overlap, reference_total, prediction_total)
 }
