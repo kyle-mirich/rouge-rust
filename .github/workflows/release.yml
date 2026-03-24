@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   build:
-    name: Build ${{ matrix.name }}
+    name: Build ${{ matrix.name }} py${{ matrix.python-version }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -28,41 +28,37 @@ jobs:
             runner: ubuntu-latest
             target: x86_64
             manylinux: auto
-            interpreter: "3.9 3.10 3.11 3.12 3.13"
-            args: --release --out dist --zig
+            args: --release --out dist --zig -i python
             test: true
           - name: linux-aarch64
             runner: ubuntu-latest
             target: aarch64
             manylinux: auto
-            interpreter: "3.9 3.10 3.11 3.12 3.13"
-            args: --release --out dist --zig
+            args: --release --out dist --zig -i python
             test: false
           - name: windows-x64
             runner: windows-latest
             target: x64
-            interpreter: "3.9 3.10 3.11 3.12 3.13"
-            args: --release --out dist
+            args: --release --out dist -i python
             test: true
           - name: macos-x86_64
             runner: macos-15-intel
             target: x86_64
-            interpreter: "3.9 3.10 3.11 3.12 3.13"
-            args: --release --out dist
+            args: --release --out dist -i python
             test: true
           - name: macos-aarch64
             runner: macos-14
             target: aarch64
-            interpreter: "3.9 3.10 3.11 3.12 3.13"
-            args: --release --out dist
+            args: --release --out dist -i python
             test: true
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
 
       - name: Build wheels
         if: ${{ matrix.manylinux }}
@@ -70,7 +66,6 @@ jobs:
         with:
           target: ${{ matrix.target }}
           manylinux: ${{ matrix.manylinux }}
-          interpreter: ${{ matrix.interpreter }}
           args: ${{ matrix.args }}
 
       - name: Build wheels
@@ -78,13 +73,12 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          interpreter: ${{ matrix.interpreter }}
           args: ${{ matrix.args }}
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.name }}
+          name: wheels-${{ matrix.name }}-py${{ matrix.python-version }}
           path: dist
 
       - name: Install wheel and run tests
