@@ -28,28 +28,33 @@ jobs:
             runner: ubuntu-latest
             target: x86_64
             manylinux: auto
-            args: --release --out dist --find-interpreter --zig
+            interpreter: "3.9 3.10 3.11 3.12 3.13"
+            args: --release --out dist --zig
             test: true
           - name: linux-aarch64
             runner: ubuntu-latest
             target: aarch64
             manylinux: auto
-            args: --release --out dist --find-interpreter --zig
+            interpreter: "3.9 3.10 3.11 3.12 3.13"
+            args: --release --out dist --zig
             test: false
           - name: windows-x64
             runner: windows-latest
             target: x64
-            args: --release --out dist --find-interpreter
+            interpreter: "3.9 3.10 3.11 3.12 3.13"
+            args: --release --out dist
             test: true
           - name: macos-x86_64
             runner: macos-15-intel
             target: x86_64
-            args: --release --out dist --find-interpreter
+            interpreter: "3.9 3.10 3.11 3.12 3.13"
+            args: --release --out dist
             test: true
           - name: macos-aarch64
             runner: macos-14
             target: aarch64
-            args: --release --out dist --find-interpreter
+            interpreter: "3.9 3.10 3.11 3.12 3.13"
+            args: --release --out dist
             test: true
 
     steps:
@@ -65,6 +70,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
           manylinux: ${{ matrix.manylinux }}
+          interpreter: ${{ matrix.interpreter }}
           args: ${{ matrix.args }}
 
       - name: Build wheels
@@ -72,6 +78,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
+          interpreter: ${{ matrix.interpreter }}
           args: ${{ matrix.args }}
 
       - name: Upload wheels

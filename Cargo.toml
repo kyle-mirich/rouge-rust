@@ -1,6 +1,6 @@
 [package]
 name = "fast_rouge"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 description = "High-performance Rust-backed ROUGE scoring for Python"
 readme = "README.md"
