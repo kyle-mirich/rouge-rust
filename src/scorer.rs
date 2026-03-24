@@ -6,7 +6,6 @@ use rustc_hash::FxHashMap as HashMap;
 thread_local! {
     static TOKEN_CACHE: RefCell<Vec<CacheEntry>> = const { RefCell::new(Vec::new()) };
     static SCORE_CACHE: RefCell<Option<PairScoreCache>> = const { RefCell::new(None) };
-    static LCS_ROWS: RefCell<(Vec<usize>, Vec<usize>)> = const { RefCell::new((Vec::new(), Vec::new())) };
 }
 
 const TOKEN_CACHE_SIZE: usize = 4;
@@ -180,30 +179,23 @@ pub fn lcs_len<T: AsRef<str>>(reference_tokens: &[T], prediction_tokens: &[T]) -
     };
 
     let width = column_tokens.len() + 1;
+    let mut previous = vec![0; width];
+    let mut current = vec![0; width];
 
-    LCS_ROWS.with(|rows| {
-        let mut rows = rows.borrow_mut();
-        ensure_zeroed_len(&mut rows.0, width);
-        ensure_zeroed_len(&mut rows.1, width);
-
-        let (previous, current) = &mut *rows;
-
-        for reference in row_tokens {
-            current[0] = 0;
-
-            for (index, prediction) in column_tokens.iter().enumerate() {
-                current[index + 1] = if reference.as_ref() == prediction.as_ref() {
-                    previous[index] + 1
-                } else {
-                    previous[index + 1].max(current[index])
-                };
-            }
-
-            std::mem::swap(previous, current);
+    for reference in row_tokens {
+        for (index, prediction) in column_tokens.iter().enumerate() {
+            current[index + 1] = if reference.as_ref() == prediction.as_ref() {
+                previous[index] + 1
+            } else {
+                previous[index + 1].max(current[index])
+            };
         }
 
-        previous[column_tokens.len()]
-    })
+        std::mem::swap(&mut previous, &mut current);
+        current.fill(0);
+    }
+
+    previous[column_tokens.len()]
 }
 
 fn tokenize_cached(text: &str) -> Rc<TokenizedText> {
@@ -455,31 +447,25 @@ fn lcs_len_tokenized(reference_tokens: &TokenizedText, prediction_tokens: &Token
     };
 
     let width = cols.len() + 1;
+    let mut previous = vec![0; width];
+    let mut current = vec![0; width];
 
-    LCS_ROWS.with(|buffers| {
-        let mut buffers = buffers.borrow_mut();
-        ensure_zeroed_len(&mut buffers.0, width);
-        ensure_zeroed_len(&mut buffers.1, width);
+    for row_index in 0..rows.len() {
+        let row_token = rows.token(row_index);
 
-        let (previous, current) = &mut *buffers;
-
-        for row_index in 0..rows.len() {
-            current[0] = 0;
-            let row_token = rows.token(row_index);
-
-            for col_index in 0..cols.len() {
-                current[col_index + 1] = if row_token == cols.token(col_index) {
-                    previous[col_index] + 1
-                } else {
-                    previous[col_index + 1].max(current[col_index])
-                };
-            }
-
-            std::mem::swap(previous, current);
+        for col_index in 0..cols.len() {
+            current[col_index + 1] = if row_token == cols.token(col_index) {
+                previous[col_index] + 1
+            } else {
+                previous[col_index + 1].max(current[col_index])
+            };
         }
 
-        previous[cols.len()]
-    })
+        std::mem::swap(&mut previous, &mut current);
+        current.fill(0);
+    }
+
+    previous[cols.len()]
 }
 
 fn cached_scores(reference: &str, prediction: &str) -> Option<ScoreSet> {
@@ -504,14 +490,6 @@ fn store_scores(reference: &str, prediction: &str, scores: ScoreSet) {
 
 fn total_ngrams(token_count: usize, n: usize) -> usize {
     token_count.checked_sub(n).map_or(0, |remaining| remaining + 1)
-}
-
-fn ensure_zeroed_len(buffer: &mut Vec<usize>, len: usize) {
-    if buffer.len() < len {
-        buffer.resize(len, 0);
-    } else {
-        buffer[..len].fill(0);
-    }
 }
 
 fn ngram_counts_tokenized<'a>(tokens: &'a TokenizedText, n: usize) -> HashMap<NgramKey<'a>, usize> {
@@ -622,7 +600,7 @@ fn score_from_counts(overlap: usize, reference_total: usize, prediction_total: u
 
 #[cfg(test)]
 mod tests {
-    use super::{Score, lcs_len, rouge_l, rouge_n, tokenize};
+    use super::{Score, lcs_len, rouge_l, rouge_n, score_all, tokenize};
 
     fn assert_score_close(actual: Score, expected: Score) {
         let epsilon = 1e-12;
@@ -700,5 +678,33 @@ mod tests {
                 fmeasure: 4.0 / 7.0,
             },
         );
+    }
+
+    #[test]
+    fn score_all_keeps_rouge_l_stable_across_calls() {
+        let warmup_pairs = [
+            ("eta beta alpha", "eta alpha"),
+            ("gamma delta epsilon zeta", "delta epsilon"),
+            ("theta eta zeta", "theta zeta"),
+        ];
+
+        for (reference, prediction) in warmup_pairs {
+            let _ = score_all(reference, prediction);
+        }
+
+        let reference = "zeta alpha delta eta beta gamma eta beta epsilon beta theta eta";
+        let prediction = "alpha theta theta theta delta gamma gamma";
+
+        let first = score_all(reference, prediction).2;
+        let second = score_all(reference, prediction).2;
+
+        let expected = Score {
+            precision: 3.0 / 7.0,
+            recall: 3.0 / 12.0,
+            fmeasure: 0.3157894736842105,
+        };
+
+        assert_score_close(first, expected);
+        assert_score_close(second, expected);
     }
 }
