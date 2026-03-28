@@ -49,10 +49,11 @@ uv pip install -e .[dev]
 uv run maturin develop --release
 ```
 
-Run the Rust tests:
+Run the Rust and Python tests:
 
 ```bash
 cargo test
+uv run pytest -q
 ```
 
 ## License
