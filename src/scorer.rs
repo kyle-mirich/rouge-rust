@@ -85,6 +85,10 @@ pub fn tokenize(text: &str) -> Vec<String> {
 }
 
 pub fn rouge_n(reference: &str, prediction: &str, n: usize) -> Score {
+    if n == 0 {
+        return Score::zero();
+    }
+
     if let Some(scores) = cached_scores(reference, prediction) {
         return match n {
             1 => scores.rouge1,
@@ -654,6 +658,13 @@ mod tests {
     #[test]
     fn rouge_n_returns_zero_for_empty_ngrams() {
         let score = rouge_n("", "anything", 1);
+
+        assert_eq!(score, Score::zero());
+    }
+
+    #[test]
+    fn rouge_n_returns_zero_for_zero_n() {
+        let score = rouge_n("the cat sat", "the cat sat", 0);
 
         assert_eq!(score, Score::zero());
     }
