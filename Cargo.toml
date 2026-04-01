@@ -2,6 +2,11 @@
 name = "fast_rouge"
 version = "0.1.0"
 edition = "2024"
+description = "High-performance Rust-backed ROUGE scoring for Python"
+readme = "README.md"
+license = "MIT"
+homepage = "https://github.com/kyle-mirich/rouge-rust"
+repository = "https://github.com/kyle-mirich/rouge-rust"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
@@ -12,3 +17,7 @@ crate-type = ["cdylib"]
 pyo3 = "0.27.0"
 rayon = "1.11.0"
 rustc-hash = "2.1.1"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"

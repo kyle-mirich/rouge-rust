@@ -1,0 +1,162 @@
+name: CI and Release
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            runner: ubuntu-latest
+            target: x86_64
+            manylinux: auto
+            args: --release --out dist --find-interpreter --zig
+            test: true
+          - name: linux-aarch64
+            runner: ubuntu-latest
+            target: aarch64
+            manylinux: auto
+            args: --release --out dist --find-interpreter --zig
+            test: false
+          - name: windows-x64
+            runner: windows-latest
+            target: x64
+            args: --release --out dist --find-interpreter
+            test: true
+          - name: macos-x86_64
+            runner: macos-13
+            target: x86_64
+            args: --release --out dist --find-interpreter
+            test: true
+          - name: macos-aarch64
+            runner: macos-14
+            target: aarch64
+            args: --release --out dist --find-interpreter
+            test: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build wheels
+        if: ${{ matrix.manylinux }}
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux }}
+          args: ${{ matrix.args }}
+
+      - name: Build wheels
+        if: ${{ !matrix.manylinux }}
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          args: ${{ matrix.args }}
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.name }}
+          path: dist
+
+      - name: Install wheel and run tests
+        if: ${{ matrix.test }}
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install rouge-rust --find-links dist --force-reinstall
+          python -m pip install pytest rouge-score
+          pytest -q
+
+  sdist:
+    name: Build sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist
+
+  publish:
+    name: Publish to PyPI
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    needs:
+      - build
+      - sdist
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/rouge-rust
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist-artifacts
+
+      - name: Flatten artifacts
+        shell: bash
+        run: |
+          mkdir -p dist
+          find dist-artifacts -type f \( -name '*.whl' -o -name '*.tar.gz' \) -exec cp {} dist/ \;
+
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+
+  github-release:
+    name: Create GitHub release
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    needs:
+      - build
+      - sdist
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist-artifacts
+
+      - name: Flatten artifacts
+        shell: bash
+        run: |
+          mkdir -p dist
+          find dist-artifacts -type f \( -name '*.whl' -o -name '*.tar.gz' \) -exec cp {} dist/ \;
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
