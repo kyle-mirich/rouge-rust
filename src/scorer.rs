@@ -135,7 +135,11 @@ pub fn score_all(reference: &str, prediction: &str) -> (Score, Score, Score) {
     (scores.rouge1, scores.rouge2, scores.rouge_l)
 }
 
-pub fn rouge_n_tokens<T: AsRef<str>>(reference_tokens: &[T], prediction_tokens: &[T], n: usize) -> Score {
+pub fn rouge_n_tokens<T: AsRef<str>>(
+    reference_tokens: &[T],
+    prediction_tokens: &[T],
+    n: usize,
+) -> Score {
     if n == 0 {
         return Score::zero();
     }
@@ -271,7 +275,11 @@ fn score_set(reference_tokens: &TokenizedText, prediction_tokens: &TokenizedText
     }
 }
 
-fn rouge_n_tokenized(reference_tokens: &TokenizedText, prediction_tokens: &TokenizedText, n: usize) -> Score {
+fn rouge_n_tokenized(
+    reference_tokens: &TokenizedText,
+    prediction_tokens: &TokenizedText,
+    n: usize,
+) -> Score {
     if n == 1 {
         return rouge1_tokenized(reference_tokens, prediction_tokens);
     }
@@ -302,8 +310,7 @@ fn rouge1_tokenized(reference_tokens: &TokenizedText, prediction_tokens: &Tokeni
         return Score::zero();
     }
 
-    let mut counts =
-        HashMap::with_capacity_and_hasher(reference_total, Default::default());
+    let mut counts = HashMap::with_capacity_and_hasher(reference_total, Default::default());
 
     for index in 0..reference_tokens.len() {
         *counts
@@ -316,11 +323,11 @@ fn rouge1_tokenized(reference_tokens: &TokenizedText, prediction_tokens: &Tokeni
     for index in 0..prediction_tokens.len() {
         let key = NgramKey::Unigram(prediction_tokens.token(index));
 
-        if let Some(count) = counts.get_mut(&key) {
-            if *count > 0 {
-                *count -= 1;
-                overlap += 1;
-            }
+        if let Some(count) = counts.get_mut(&key)
+            && *count > 0
+        {
+            *count -= 1;
+            overlap += 1;
         }
     }
 
@@ -335,8 +342,7 @@ fn rouge2_tokenized(reference_tokens: &TokenizedText, prediction_tokens: &Tokeni
         return Score::zero();
     }
 
-    let mut counts =
-        HashMap::with_capacity_and_hasher(reference_total, Default::default());
+    let mut counts = HashMap::with_capacity_and_hasher(reference_total, Default::default());
 
     for index in 0..(reference_tokens.len() - 1) {
         *counts
@@ -355,11 +361,11 @@ fn rouge2_tokenized(reference_tokens: &TokenizedText, prediction_tokens: &Tokeni
             prediction_tokens.token(index + 1),
         );
 
-        if let Some(count) = counts.get_mut(&key) {
-            if *count > 0 {
-                *count -= 1;
-                overlap += 1;
-            }
+        if let Some(count) = counts.get_mut(&key)
+            && *count > 0
+        {
+            *count -= 1;
+            overlap += 1;
         }
     }
 
@@ -374,8 +380,7 @@ fn rouge1_tokens<T: AsRef<str>>(reference_tokens: &[T], prediction_tokens: &[T])
         return Score::zero();
     }
 
-    let mut counts =
-        HashMap::with_capacity_and_hasher(reference_total, Default::default());
+    let mut counts = HashMap::with_capacity_and_hasher(reference_total, Default::default());
 
     for token in reference_tokens {
         *counts.entry(NgramKey::Unigram(token.as_ref())).or_insert(0) += 1;
@@ -386,11 +391,11 @@ fn rouge1_tokens<T: AsRef<str>>(reference_tokens: &[T], prediction_tokens: &[T])
     for token in prediction_tokens {
         let key = NgramKey::Unigram(token.as_ref());
 
-        if let Some(count) = counts.get_mut(&key) {
-            if *count > 0 {
-                *count -= 1;
-                overlap += 1;
-            }
+        if let Some(count) = counts.get_mut(&key)
+            && *count > 0
+        {
+            *count -= 1;
+            overlap += 1;
         }
     }
 
@@ -405,8 +410,7 @@ fn rouge2_tokens<T: AsRef<str>>(reference_tokens: &[T], prediction_tokens: &[T])
         return Score::zero();
     }
 
-    let mut counts =
-        HashMap::with_capacity_and_hasher(reference_total, Default::default());
+    let mut counts = HashMap::with_capacity_and_hasher(reference_total, Default::default());
 
     for window in reference_tokens.windows(2) {
         *counts
@@ -419,11 +423,11 @@ fn rouge2_tokens<T: AsRef<str>>(reference_tokens: &[T], prediction_tokens: &[T])
     for window in prediction_tokens.windows(2) {
         let key = NgramKey::Bigram(window[0].as_ref(), window[1].as_ref());
 
-        if let Some(count) = counts.get_mut(&key) {
-            if *count > 0 {
-                *count -= 1;
-                overlap += 1;
-            }
+        if let Some(count) = counts.get_mut(&key)
+            && *count > 0
+        {
+            *count -= 1;
+            overlap += 1;
         }
     }
 
@@ -493,11 +497,14 @@ fn store_scores(reference: &str, prediction: &str, scores: ScoreSet) {
 }
 
 fn total_ngrams(token_count: usize, n: usize) -> usize {
-    token_count.checked_sub(n).map_or(0, |remaining| remaining + 1)
+    token_count
+        .checked_sub(n)
+        .map_or(0, |remaining| remaining + 1)
 }
 
 fn ngram_counts_tokenized<'a>(tokens: &'a TokenizedText, n: usize) -> HashMap<NgramKey<'a>, usize> {
-    let mut counts = HashMap::with_capacity_and_hasher(total_ngrams(tokens.len(), n), Default::default());
+    let mut counts =
+        HashMap::with_capacity_and_hasher(total_ngrams(tokens.len(), n), Default::default());
 
     if tokens.len() < n {
         return counts;
@@ -506,13 +513,18 @@ fn ngram_counts_tokenized<'a>(tokens: &'a TokenizedText, n: usize) -> HashMap<Ng
     match n {
         1 => {
             for index in 0..tokens.len() {
-                *counts.entry(NgramKey::Unigram(tokens.token(index))).or_insert(0) += 1;
+                *counts
+                    .entry(NgramKey::Unigram(tokens.token(index)))
+                    .or_insert(0) += 1;
             }
         }
         2 => {
             for index in 0..(tokens.len() - 1) {
                 *counts
-                    .entry(NgramKey::Bigram(tokens.token(index), tokens.token(index + 1)))
+                    .entry(NgramKey::Bigram(
+                        tokens.token(index),
+                        tokens.token(index + 1),
+                    ))
                     .or_insert(0) += 1;
             }
         }
@@ -532,8 +544,12 @@ fn ngram_counts_tokenized<'a>(tokens: &'a TokenizedText, n: usize) -> HashMap<Ng
     counts
 }
 
-fn ngram_counts_from_slice<'a, T: AsRef<str>>(tokens: &'a [T], n: usize) -> HashMap<NgramKey<'a>, usize> {
-    let mut counts = HashMap::with_capacity_and_hasher(total_ngrams(tokens.len(), n), Default::default());
+fn ngram_counts_from_slice<'a, T: AsRef<str>>(
+    tokens: &'a [T],
+    n: usize,
+) -> HashMap<NgramKey<'a>, usize> {
+    let mut counts =
+        HashMap::with_capacity_and_hasher(total_ngrams(tokens.len(), n), Default::default());
 
     if tokens.len() < n {
         return counts;
@@ -575,9 +591,9 @@ fn overlap_count(
     reference_counts
         .iter()
         .map(|(ngram, reference_count)| {
-            prediction_counts
-                .get(ngram)
-                .map_or(0, |prediction_count| (*reference_count).min(*prediction_count))
+            prediction_counts.get(ngram).map_or(0, |prediction_count| {
+                (*reference_count).min(*prediction_count)
+            })
         })
         .sum()
 }

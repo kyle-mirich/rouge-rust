@@ -17,6 +17,39 @@ permissions:
   contents: read
 
 jobs:
+  quality:
+    name: Quality checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python test tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install maturin pytest rouge-score
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Run clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run Rust tests
+        run: cargo test
+
+      - name: Build local extension and run Python tests
+        run: |
+          maturin develop --release
+          pytest -q
+
   build-native:
     name: Build ${{ matrix.platform.name }} py${{ matrix.python-version }}
     runs-on: ${{ matrix.platform.runner }}
@@ -80,13 +113,9 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          python -m pip install rouge-rust --find-links dist --force-reinstall
-          if [ -d tests ]; then
-            python -m pip install pytest rouge-score
-            pytest -q
-          else
-            echo "No tests directory on this branch; skipping pytest."
-          fi
+          python -m pip install --no-index --find-links dist rouge-rust --force-reinstall
+          python -m pip install pytest rouge-score
+          pytest -q
 
   build-linux-aarch64:
     name: Build linux-aarch64
@@ -133,6 +162,7 @@ jobs:
     name: Publish to PyPI
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
     needs:
+      - quality
       - build-native
       - build-linux-aarch64
       - sdist
@@ -162,6 +192,7 @@ jobs:
     name: Create GitHub release
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
     needs:
+      - quality
       - build-native
       - build-linux-aarch64
       - sdist

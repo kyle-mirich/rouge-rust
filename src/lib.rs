@@ -1,15 +1,15 @@
 pub mod scorer;
 
 #[cfg(not(test))]
-use std::mem::{ManuallyDrop, MaybeUninit};
+use pyo3::exceptions::PyValueError;
 #[cfg(not(test))]
 use pyo3::prelude::*;
-#[cfg(not(test))]
-use pyo3::exceptions::PyValueError;
 #[cfg(not(test))]
 use pyo3::types::PyDict;
 #[cfg(not(test))]
 use rayon::prelude::*;
+#[cfg(not(test))]
+use std::mem::{ManuallyDrop, MaybeUninit};
 
 /// Returns a constant string so the Python bridge can be smoke-tested.
 #[cfg(not(test))]
@@ -104,7 +104,13 @@ fn uninit_f64_vec(len: usize) -> Vec<MaybeUninit<f64>> {
 #[cfg(not(test))]
 fn assume_init_f64_vec(values: Vec<MaybeUninit<f64>>) -> Vec<f64> {
     let mut values = ManuallyDrop::new(values);
-    unsafe { Vec::from_raw_parts(values.as_mut_ptr() as *mut f64, values.len(), values.capacity()) }
+    unsafe {
+        Vec::from_raw_parts(
+            values.as_mut_ptr() as *mut f64,
+            values.len(),
+            values.capacity(),
+        )
+    }
 }
 
 #[cfg(not(test))]
