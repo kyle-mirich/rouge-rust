@@ -47,7 +47,7 @@ jobs:
 
       - name: Build local extension and run Python tests
         run: |
-          maturin develop --release
+          python -m pip install . --force-reinstall
           pytest -q
 
   build-native:
