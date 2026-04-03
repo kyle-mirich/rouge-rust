@@ -5,10 +5,9 @@ Thanks for contributing.
 ## Development setup
 
 ```bash
-source "$HOME/.cargo/env"
-python3 -m venv .venv
-.venv/bin/python -m pip install --upgrade pip maturin pytest rouge-score twine
-.venv/bin/maturin develop --release
+uv venv
+uv pip install -e .[dev]
+uv run maturin develop --release
 ```
 
 ## Before opening a PR
@@ -16,10 +15,9 @@ python3 -m venv .venv
 Run the full validation suite:
 
 ```bash
-source "$HOME/.cargo/env"
 cargo test
-.venv/bin/pytest -q
-PAIR_COUNT=100000 REPEATS=3 .venv/bin/python benchmark.py
+uv run pytest -q
+PAIR_COUNT=100000 REPEATS=3 uv run python benchmark.py
 ```
 
 ## Contribution guidelines
@@ -33,9 +31,8 @@ PAIR_COUNT=100000 REPEATS=3 .venv/bin/python benchmark.py
 ## Release checklist
 
 ```bash
-source "$HOME/.cargo/env"
-.venv/bin/maturin build --release --sdist -o dist
-.venv/bin/python -m twine check dist/*
+uv run maturin build --release --sdist -o dist
+uv run twine check dist/*
 ```
 
 ## Automated releases

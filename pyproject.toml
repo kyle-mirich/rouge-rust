@@ -30,6 +30,7 @@ Issues = "https://github.com/kyle-mirich/rouge-rust/issues"
 
 [project.optional-dependencies]
 dev = [
+    "maturin>=1.12,<2.0",
     "pytest>=8",
     "rouge-score>=0.1.2",
     "twine>=6",

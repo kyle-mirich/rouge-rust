@@ -6,7 +6,6 @@ use rustc_hash::FxHashMap as HashMap;
 thread_local! {
     static TOKEN_CACHE: RefCell<Vec<CacheEntry>> = const { RefCell::new(Vec::new()) };
     static SCORE_CACHE: RefCell<Option<PairScoreCache>> = const { RefCell::new(None) };
-    static LCS_ROWS: RefCell<(Vec<usize>, Vec<usize>)> = const { RefCell::new((Vec::new(), Vec::new())) };
 }
 
 const TOKEN_CACHE_SIZE: usize = 4;
@@ -86,6 +85,10 @@ pub fn tokenize(text: &str) -> Vec<String> {
 }
 
 pub fn rouge_n(reference: &str, prediction: &str, n: usize) -> Score {
+    if n == 0 {
+        return Score::zero();
+    }
+
     if let Some(scores) = cached_scores(reference, prediction) {
         return match n {
             1 => scores.rouge1,
@@ -132,7 +135,11 @@ pub fn score_all(reference: &str, prediction: &str) -> (Score, Score, Score) {
     (scores.rouge1, scores.rouge2, scores.rouge_l)
 }
 
-pub fn rouge_n_tokens<T: AsRef<str>>(reference_tokens: &[T], prediction_tokens: &[T], n: usize) -> Score {
+pub fn rouge_n_tokens<T: AsRef<str>>(
+    reference_tokens: &[T],
+    prediction_tokens: &[T],
+    n: usize,
+) -> Score {
     if n == 0 {
         return Score::zero();
     }
@@ -181,29 +188,23 @@ pub fn lcs_len<T: AsRef<str>>(reference_tokens: &[T], prediction_tokens: &[T]) -
 
     let width = column_tokens.len() + 1;
 
-    LCS_ROWS.with(|rows| {
-        let mut rows = rows.borrow_mut();
-        ensure_zeroed_len(&mut rows.0, width);
-        ensure_zeroed_len(&mut rows.1, width);
+    let mut previous = vec![0; width];
+    let mut current = vec![0; width];
 
-        let (previous, current) = &mut *rows;
-
-        for reference in row_tokens {
-            current[0] = 0;
-
-            for (index, prediction) in column_tokens.iter().enumerate() {
-                current[index + 1] = if reference.as_ref() == prediction.as_ref() {
-                    previous[index] + 1
-                } else {
-                    previous[index + 1].max(current[index])
-                };
-            }
-
-            std::mem::swap(previous, current);
+    for reference in row_tokens {
+        for (index, prediction) in column_tokens.iter().enumerate() {
+            current[index + 1] = if reference.as_ref() == prediction.as_ref() {
+                previous[index] + 1
+            } else {
+                previous[index + 1].max(current[index])
+            };
         }
 
-        previous[column_tokens.len()]
-    })
+        std::mem::swap(&mut previous, &mut current);
+        current.fill(0);
+    }
+
+    previous[column_tokens.len()]
 }
 
 fn tokenize_cached(text: &str) -> Rc<TokenizedText> {
@@ -275,7 +276,11 @@ fn score_set(reference_tokens: &TokenizedText, prediction_tokens: &TokenizedText
     }
 }
 
-fn rouge_n_tokenized(reference_tokens: &TokenizedText, prediction_tokens: &TokenizedText, n: usize) -> Score {
+fn rouge_n_tokenized(
+    reference_tokens: &TokenizedText,
+    prediction_tokens: &TokenizedText,
+    n: usize,
+) -> Score {
     if n == 1 {
         return rouge1_tokenized(reference_tokens, prediction_tokens);
     }
@@ -306,8 +311,7 @@ fn rouge1_tokenized(reference_tokens: &TokenizedText, prediction_tokens: &Tokeni
         return Score::zero();
     }
 
-    let mut counts =
-        HashMap::with_capacity_and_hasher(reference_total, Default::default());
+    let mut counts = HashMap::with_capacity_and_hasher(reference_total, Default::default());
 
     for index in 0..reference_tokens.len() {
         *counts
@@ -320,11 +324,11 @@ fn rouge1_tokenized(reference_tokens: &TokenizedText, prediction_tokens: &Tokeni
     for index in 0..prediction_tokens.len() {
         let key = NgramKey::Unigram(prediction_tokens.token(index));
 
-        if let Some(count) = counts.get_mut(&key) {
-            if *count > 0 {
-                *count -= 1;
-                overlap += 1;
-            }
+        if let Some(count) = counts.get_mut(&key)
+            && *count > 0
+        {
+            *count -= 1;
+            overlap += 1;
         }
     }
 
@@ -339,8 +343,7 @@ fn rouge2_tokenized(reference_tokens: &TokenizedText, prediction_tokens: &Tokeni
         return Score::zero();
     }
 
-    let mut counts =
-        HashMap::with_capacity_and_hasher(reference_total, Default::default());
+    let mut counts = HashMap::with_capacity_and_hasher(reference_total, Default::default());
 
     for index in 0..(reference_tokens.len() - 1) {
         *counts
@@ -359,11 +362,11 @@ fn rouge2_tokenized(reference_tokens: &TokenizedText, prediction_tokens: &Tokeni
             prediction_tokens.token(index + 1),
         );
 
-        if let Some(count) = counts.get_mut(&key) {
-            if *count > 0 {
-                *count -= 1;
-                overlap += 1;
-            }
+        if let Some(count) = counts.get_mut(&key)
+            && *count > 0
+        {
+            *count -= 1;
+            overlap += 1;
         }
     }
 
@@ -378,8 +381,7 @@ fn rouge1_tokens<T: AsRef<str>>(reference_tokens: &[T], prediction_tokens: &[T])
         return Score::zero();
     }
 
-    let mut counts =
-        HashMap::with_capacity_and_hasher(reference_total, Default::default());
+    let mut counts = HashMap::with_capacity_and_hasher(reference_total, Default::default());
 
     for token in reference_tokens {
         *counts.entry(NgramKey::Unigram(token.as_ref())).or_insert(0) += 1;
@@ -390,11 +392,11 @@ fn rouge1_tokens<T: AsRef<str>>(reference_tokens: &[T], prediction_tokens: &[T])
     for token in prediction_tokens {
         let key = NgramKey::Unigram(token.as_ref());
 
-        if let Some(count) = counts.get_mut(&key) {
-            if *count > 0 {
-                *count -= 1;
-                overlap += 1;
-            }
+        if let Some(count) = counts.get_mut(&key)
+            && *count > 0
+        {
+            *count -= 1;
+            overlap += 1;
         }
     }
 
@@ -409,8 +411,7 @@ fn rouge2_tokens<T: AsRef<str>>(reference_tokens: &[T], prediction_tokens: &[T])
         return Score::zero();
     }
 
-    let mut counts =
-        HashMap::with_capacity_and_hasher(reference_total, Default::default());
+    let mut counts = HashMap::with_capacity_and_hasher(reference_total, Default::default());
 
     for window in reference_tokens.windows(2) {
         *counts
@@ -423,11 +424,11 @@ fn rouge2_tokens<T: AsRef<str>>(reference_tokens: &[T], prediction_tokens: &[T])
     for window in prediction_tokens.windows(2) {
         let key = NgramKey::Bigram(window[0].as_ref(), window[1].as_ref());
 
-        if let Some(count) = counts.get_mut(&key) {
-            if *count > 0 {
-                *count -= 1;
-                overlap += 1;
-            }
+        if let Some(count) = counts.get_mut(&key)
+            && *count > 0
+        {
+            *count -= 1;
+            overlap += 1;
         }
     }
 
@@ -456,30 +457,25 @@ fn lcs_len_tokenized(reference_tokens: &TokenizedText, prediction_tokens: &Token
 
     let width = cols.len() + 1;
 
-    LCS_ROWS.with(|buffers| {
-        let mut buffers = buffers.borrow_mut();
-        ensure_zeroed_len(&mut buffers.0, width);
-        ensure_zeroed_len(&mut buffers.1, width);
+    let mut previous = vec![0; width];
+    let mut current = vec![0; width];
 
-        let (previous, current) = &mut *buffers;
+    for row_index in 0..rows.len() {
+        let row_token = rows.token(row_index);
 
-        for row_index in 0..rows.len() {
-            current[0] = 0;
-            let row_token = rows.token(row_index);
-
-            for col_index in 0..cols.len() {
-                current[col_index + 1] = if row_token == cols.token(col_index) {
-                    previous[col_index] + 1
-                } else {
-                    previous[col_index + 1].max(current[col_index])
-                };
-            }
-
-            std::mem::swap(previous, current);
+        for col_index in 0..cols.len() {
+            current[col_index + 1] = if row_token == cols.token(col_index) {
+                previous[col_index] + 1
+            } else {
+                previous[col_index + 1].max(current[col_index])
+            };
         }
 
-        previous[cols.len()]
-    })
+        std::mem::swap(&mut previous, &mut current);
+        current.fill(0);
+    }
+
+    previous[cols.len()]
 }
 
 fn cached_scores(reference: &str, prediction: &str) -> Option<ScoreSet> {
@@ -503,19 +499,14 @@ fn store_scores(reference: &str, prediction: &str, scores: ScoreSet) {
 }
 
 fn total_ngrams(token_count: usize, n: usize) -> usize {
-    token_count.checked_sub(n).map_or(0, |remaining| remaining + 1)
-}
-
-fn ensure_zeroed_len(buffer: &mut Vec<usize>, len: usize) {
-    if buffer.len() < len {
-        buffer.resize(len, 0);
-    } else {
-        buffer[..len].fill(0);
-    }
+    token_count
+        .checked_sub(n)
+        .map_or(0, |remaining| remaining + 1)
 }
 
 fn ngram_counts_tokenized<'a>(tokens: &'a TokenizedText, n: usize) -> HashMap<NgramKey<'a>, usize> {
-    let mut counts = HashMap::with_capacity_and_hasher(total_ngrams(tokens.len(), n), Default::default());
+    let mut counts =
+        HashMap::with_capacity_and_hasher(total_ngrams(tokens.len(), n), Default::default());
 
     if tokens.len() < n {
         return counts;
@@ -524,13 +515,18 @@ fn ngram_counts_tokenized<'a>(tokens: &'a TokenizedText, n: usize) -> HashMap<Ng
     match n {
         1 => {
             for index in 0..tokens.len() {
-                *counts.entry(NgramKey::Unigram(tokens.token(index))).or_insert(0) += 1;
+                *counts
+                    .entry(NgramKey::Unigram(tokens.token(index)))
+                    .or_insert(0) += 1;
             }
         }
         2 => {
             for index in 0..(tokens.len() - 1) {
                 *counts
-                    .entry(NgramKey::Bigram(tokens.token(index), tokens.token(index + 1)))
+                    .entry(NgramKey::Bigram(
+                        tokens.token(index),
+                        tokens.token(index + 1),
+                    ))
                     .or_insert(0) += 1;
             }
         }
@@ -550,8 +546,12 @@ fn ngram_counts_tokenized<'a>(tokens: &'a TokenizedText, n: usize) -> HashMap<Ng
     counts
 }
 
-fn ngram_counts_from_slice<'a, T: AsRef<str>>(tokens: &'a [T], n: usize) -> HashMap<NgramKey<'a>, usize> {
-    let mut counts = HashMap::with_capacity_and_hasher(total_ngrams(tokens.len(), n), Default::default());
+fn ngram_counts_from_slice<'a, T: AsRef<str>>(
+    tokens: &'a [T],
+    n: usize,
+) -> HashMap<NgramKey<'a>, usize> {
+    let mut counts =
+        HashMap::with_capacity_and_hasher(total_ngrams(tokens.len(), n), Default::default());
 
     if tokens.len() < n {
         return counts;
@@ -593,9 +593,9 @@ fn overlap_count(
     reference_counts
         .iter()
         .map(|(ngram, reference_count)| {
-            prediction_counts
-                .get(ngram)
-                .map_or(0, |prediction_count| (*reference_count).min(*prediction_count))
+            prediction_counts.get(ngram).map_or(0, |prediction_count| {
+                (*reference_count).min(*prediction_count)
+            })
         })
         .sum()
 }
@@ -622,7 +622,7 @@ fn score_from_counts(overlap: usize, reference_total: usize, prediction_total: u
 
 #[cfg(test)]
 mod tests {
-    use super::{Score, lcs_len, rouge_l, rouge_n, tokenize};
+    use super::{Score, lcs_len, rouge_l, rouge_n, score_all, tokenize};
 
     fn assert_score_close(actual: Score, expected: Score) {
         let epsilon = 1e-12;
@@ -681,6 +681,13 @@ mod tests {
     }
 
     #[test]
+    fn rouge_n_returns_zero_for_zero_n() {
+        let score = rouge_n("the cat sat", "the cat sat", 0);
+
+        assert_eq!(score, Score::zero());
+    }
+
+    #[test]
     fn lcs_len_finds_longest_common_subsequence() {
         let reference = tokenize("the cat was found under the bed");
         let prediction = tokenize("the cat was under the bed");
@@ -700,5 +707,33 @@ mod tests {
                 fmeasure: 4.0 / 7.0,
             },
         );
+    }
+
+    #[test]
+    fn score_all_keeps_rouge_l_stable_across_calls() {
+        let warmup_pairs = [
+            ("eta beta alpha", "eta alpha"),
+            ("gamma delta epsilon zeta", "delta epsilon"),
+            ("theta eta zeta", "theta zeta"),
+        ];
+
+        for (reference, prediction) in warmup_pairs {
+            let _ = score_all(reference, prediction);
+        }
+
+        let reference = "zeta alpha delta eta beta gamma eta beta epsilon beta theta eta";
+        let prediction = "alpha theta theta theta delta gamma gamma";
+
+        let first = score_all(reference, prediction).2;
+        let second = score_all(reference, prediction).2;
+
+        let expected = Score {
+            precision: 3.0 / 7.0,
+            recall: 3.0 / 12.0,
+            fmeasure: 0.3157894736842105,
+        };
+
+        assert_score_close(first, expected);
+        assert_score_close(second, expected);
     }
 }

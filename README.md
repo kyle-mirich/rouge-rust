@@ -18,6 +18,12 @@ with fast batch APIs for large-scale evaluation workloads.
 pip install rouge-rust
 ```
 
+Or with `uv`:
+
+```bash
+uv add rouge-rust
+```
+
 ## Usage
 
 ```python
@@ -39,27 +45,27 @@ flat = fast_rouge.score_batch_flat(
 print(flat.rouge1_fmeasure[0])
 ```
 
-## Development
+## Local development
 
-Build the extension into the active virtual environment:
+Set up a local environment and install the development dependencies:
 
 ```bash
-source "$HOME/.cargo/env"
-.venv/bin/maturin develop --release
+uv venv
+uv pip install -e .[dev]
+uv run maturin develop --release
 ```
 
 Run tests:
 
 ```bash
-source "$HOME/.cargo/env"
 cargo test
-.venv/bin/pytest -q
+uv run pytest -q
 ```
 
 Run the benchmark:
 
 ```bash
-PAIR_COUNT=100000 REPEATS=3 .venv/bin/python benchmark.py
+PAIR_COUNT=100000 REPEATS=3 uv run python benchmark.py
 ```
 
 ## Contributing
@@ -75,21 +81,19 @@ This project is released under the MIT License. See [LICENSE](LICENSE).
 Build a source distribution and wheel:
 
 ```bash
-source "$HOME/.cargo/env"
-.venv/bin/maturin build --release --sdist -o dist
+uv run maturin build --release --sdist -o dist
 ```
 
 Validate the distributions:
 
 ```bash
-.venv/bin/python -m twine check dist/*
+uv run twine check dist/*
 ```
 
 Upload to PyPI:
 
 ```bash
-source "$HOME/.cargo/env"
-.venv/bin/maturin upload dist/*
+uv run maturin upload dist/*
 ```
 
 ## GitHub Actions release flow

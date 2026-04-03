@@ -17,41 +17,109 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    name: Build ${{ matrix.name }}
-    runs-on: ${{ matrix.runner }}
+  quality:
+    name: Quality checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python test tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install maturin pytest rouge-score
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Run clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run Rust tests
+        run: cargo test
+
+      - name: Build local extension and run Python tests
+        run: |
+          maturin develop --release
+          pytest -q
+
+  build-native:
+    name: Build ${{ matrix.platform.name }} py${{ matrix.python-version }}
+    runs-on: ${{ matrix.platform.runner }}
     strategy:
       fail-fast: false
       matrix:
-        include:
+        platform:
           - name: linux-x86_64
             runner: ubuntu-latest
             target: x86_64
             manylinux: auto
-            args: --release --out dist --find-interpreter --zig
+            args: --release --out dist --zig -i python
             test: true
-          - name: linux-aarch64
-            runner: ubuntu-latest
-            target: aarch64
-            manylinux: auto
-            args: --release --out dist --find-interpreter --zig
-            test: false
           - name: windows-x64
             runner: windows-latest
             target: x64
-            args: --release --out dist --find-interpreter
+            args: --release --out dist -i python
             test: true
           - name: macos-x86_64
-            runner: macos-13
+            runner: macos-15-intel
             target: x86_64
-            args: --release --out dist --find-interpreter
+            args: --release --out dist -i python
             test: true
           - name: macos-aarch64
             runner: macos-14
             target: aarch64
-            args: --release --out dist --find-interpreter
+            args: --release --out dist -i python
             test: true
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
 
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Build wheels
+        if: ${{ matrix.platform.manylinux }}
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          manylinux: ${{ matrix.platform.manylinux }}
+          args: ${{ matrix.platform.args }}
+
+      - name: Build wheels
+        if: ${{ !matrix.platform.manylinux }}
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.platform.target }}
+          args: ${{ matrix.platform.args }}
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.platform.name }}-py${{ matrix.python-version }}
+          path: dist
+
+      - name: Install wheel and run tests
+        if: ${{ matrix.platform.test }}
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --no-index --find-links dist rouge-rust --force-reinstall
+          python -m pip install pytest rouge-score
+          pytest -q
+
+  build-linux-aarch64:
+    name: Build linux-aarch64
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -60,34 +128,17 @@ jobs:
           python-version: "3.11"
 
       - name: Build wheels
-        if: ${{ matrix.manylinux }}
         uses: PyO3/maturin-action@v1
         with:
-          target: ${{ matrix.target }}
-          manylinux: ${{ matrix.manylinux }}
-          args: ${{ matrix.args }}
-
-      - name: Build wheels
-        if: ${{ !matrix.manylinux }}
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.target }}
-          args: ${{ matrix.args }}
+          target: aarch64
+          manylinux: auto
+          args: --release --out dist --find-interpreter --zig
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.name }}
+          name: wheels-linux-aarch64
           path: dist
-
-      - name: Install wheel and run tests
-        if: ${{ matrix.test }}
-        shell: bash
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install rouge-rust --find-links dist --force-reinstall
-          python -m pip install pytest rouge-score
-          pytest -q
 
   sdist:
     name: Build sdist
@@ -111,7 +162,9 @@ jobs:
     name: Publish to PyPI
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
     needs:
-      - build
+      - quality
+      - build-native
+      - build-linux-aarch64
       - sdist
     runs-on: ubuntu-latest
     environment:
@@ -139,7 +192,9 @@ jobs:
     name: Create GitHub release
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
     needs:
-      - build
+      - quality
+      - build-native
+      - build-linux-aarch64
       - sdist
     runs-on: ubuntu-latest
     permissions:
