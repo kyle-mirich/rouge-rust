@@ -61,6 +61,51 @@ def make_pairs(count: int) -> tuple[list[str], list[str]]:
     return references, predictions
 
 
+def score_tuple(score: object) -> tuple[float, float, float]:
+    return (score.precision, score.recall, score.fmeasure)
+
+
+def flat_score_tuple(batch_result: object, index: int, prefix: str) -> tuple[float, float, float]:
+    return (
+        getattr(batch_result, f"{prefix}_precision")[index],
+        getattr(batch_result, f"{prefix}_recall")[index],
+        getattr(batch_result, f"{prefix}_fmeasure")[index],
+    )
+
+
+def validate_results(
+    baseline_scores: list[object],
+    fast_scores: list[object],
+    flat_scores: object,
+) -> None:
+    if len(baseline_scores) != len(fast_scores):
+        raise RuntimeError("benchmark validation failed: result lengths differ")
+
+    if len(flat_scores.rouge1_precision) != len(baseline_scores):
+        raise RuntimeError("flat benchmark validation failed: result lengths differ")
+
+    sample_indexes = sorted({0, len(baseline_scores) // 2, len(baseline_scores) - 1})
+
+    for index in sample_indexes:
+        baseline_score = baseline_scores[index]
+        fast_score = fast_scores[index]
+
+        for rouge_type in ROUGE_TYPES:
+            baseline_tuple = score_tuple(baseline_score[rouge_type])
+            fast_tuple = score_tuple(fast_score[rouge_type])
+            flat_tuple = flat_score_tuple(flat_scores, index, rouge_type)
+
+            if baseline_tuple != fast_tuple:
+                raise RuntimeError(
+                    f"benchmark validation failed for {rouge_type} at index {index}"
+                )
+
+            if baseline_tuple != flat_tuple:
+                raise RuntimeError(
+                    f"flat benchmark validation failed for {rouge_type} at index {index}"
+                )
+
+
 def main() -> None:
     references, predictions = make_pairs(PAIR_COUNT)
     scorer = rouge_scorer.RougeScorer(ROUGE_TYPES, use_stemmer=False)
@@ -98,11 +143,7 @@ def main() -> None:
         dict_runs.append(fast_seconds)
         flat_runs.append(flat_seconds)
 
-    if len(baseline_scores) != len(fast_scores):
-        raise RuntimeError("benchmark validation failed: result lengths differ")
-
-    if len(flat_scores.rouge1_precision) != len(baseline_scores):
-        raise RuntimeError("flat benchmark validation failed: result lengths differ")
+    validate_results(baseline_scores, fast_scores, flat_scores)
 
     baseline_seconds = min(baseline_runs)
     fast_seconds = min(dict_runs)
@@ -118,6 +159,7 @@ def main() -> None:
     print(f"score_batch speedup: {dict_speedup:.2f}x")
     print(f"fast_rouge.score_batch_flat: {flat_seconds:.4f}s")
     print(f"score_batch_flat speedup: {flat_speedup:.2f}x")
+    print("validation: sampled outputs match rouge-score")
 
 
 if __name__ == "__main__":

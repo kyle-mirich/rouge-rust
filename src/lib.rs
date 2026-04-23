@@ -8,15 +8,6 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 #[cfg(not(test))]
 use rayon::prelude::*;
-#[cfg(not(test))]
-use std::mem::{ManuallyDrop, MaybeUninit};
-
-/// Returns a constant string so the Python bridge can be smoke-tested.
-#[cfg(not(test))]
-#[pyfunction]
-fn dummy_score() -> &'static str {
-    "fast_rouge-ready"
-}
 
 #[cfg(not(test))]
 #[pyclass(name = "Score", module = "fast_rouge")]
@@ -93,27 +84,6 @@ fn to_python_dict(py: Python<'_>, scores: ScoreBundle) -> PyResult<Py<PyDict>> {
 }
 
 #[cfg(not(test))]
-fn uninit_f64_vec(len: usize) -> Vec<MaybeUninit<f64>> {
-    let mut values = Vec::with_capacity(len);
-    unsafe {
-        values.set_len(len);
-    }
-    values
-}
-
-#[cfg(not(test))]
-fn assume_init_f64_vec(values: Vec<MaybeUninit<f64>>) -> Vec<f64> {
-    let mut values = ManuallyDrop::new(values);
-    unsafe {
-        Vec::from_raw_parts(
-            values.as_mut_ptr() as *mut f64,
-            values.len(),
-            values.capacity(),
-        )
-    }
-}
-
-#[cfg(not(test))]
 #[pyfunction]
 fn score(py: Python<'_>, reference: &str, prediction: &str) -> PyResult<Py<PyDict>> {
     to_python_dict(py, compute_scores(reference, prediction))
@@ -158,15 +128,15 @@ fn score_batch_flat(
     }
 
     let capacity = references.len();
-    let mut rouge1_precision = uninit_f64_vec(capacity);
-    let mut rouge1_recall = uninit_f64_vec(capacity);
-    let mut rouge1_fmeasure = uninit_f64_vec(capacity);
-    let mut rouge2_precision = uninit_f64_vec(capacity);
-    let mut rouge2_recall = uninit_f64_vec(capacity);
-    let mut rouge2_fmeasure = uninit_f64_vec(capacity);
-    let mut rouge_l_precision = uninit_f64_vec(capacity);
-    let mut rouge_l_recall = uninit_f64_vec(capacity);
-    let mut rouge_l_fmeasure = uninit_f64_vec(capacity);
+    let mut rouge1_precision = vec![0.0; capacity];
+    let mut rouge1_recall = vec![0.0; capacity];
+    let mut rouge1_fmeasure = vec![0.0; capacity];
+    let mut rouge2_precision = vec![0.0; capacity];
+    let mut rouge2_recall = vec![0.0; capacity];
+    let mut rouge2_fmeasure = vec![0.0; capacity];
+    let mut rouge_l_precision = vec![0.0; capacity];
+    let mut rouge_l_recall = vec![0.0; capacity];
+    let mut rouge_l_fmeasure = vec![0.0; capacity];
 
     (
         references.into_par_iter(),
@@ -197,30 +167,30 @@ fn score_batch_flat(
                 rouge_l_fmeasure,
             )| {
                 let scores = compute_scores(&reference, &prediction);
-                rouge1_precision.write(scores.rouge1.precision);
-                rouge1_recall.write(scores.rouge1.recall);
-                rouge1_fmeasure.write(scores.rouge1.fmeasure);
-                rouge2_precision.write(scores.rouge2.precision);
-                rouge2_recall.write(scores.rouge2.recall);
-                rouge2_fmeasure.write(scores.rouge2.fmeasure);
-                rouge_l_precision.write(scores.rouge_l.precision);
-                rouge_l_recall.write(scores.rouge_l.recall);
-                rouge_l_fmeasure.write(scores.rouge_l.fmeasure);
+                *rouge1_precision = scores.rouge1.precision;
+                *rouge1_recall = scores.rouge1.recall;
+                *rouge1_fmeasure = scores.rouge1.fmeasure;
+                *rouge2_precision = scores.rouge2.precision;
+                *rouge2_recall = scores.rouge2.recall;
+                *rouge2_fmeasure = scores.rouge2.fmeasure;
+                *rouge_l_precision = scores.rouge_l.precision;
+                *rouge_l_recall = scores.rouge_l.recall;
+                *rouge_l_fmeasure = scores.rouge_l.fmeasure;
             },
         );
 
     Py::new(
         py,
         BatchScoreResult {
-            rouge1_precision: assume_init_f64_vec(rouge1_precision),
-            rouge1_recall: assume_init_f64_vec(rouge1_recall),
-            rouge1_fmeasure: assume_init_f64_vec(rouge1_fmeasure),
-            rouge2_precision: assume_init_f64_vec(rouge2_precision),
-            rouge2_recall: assume_init_f64_vec(rouge2_recall),
-            rouge2_fmeasure: assume_init_f64_vec(rouge2_fmeasure),
-            rougeL_precision: assume_init_f64_vec(rouge_l_precision),
-            rougeL_recall: assume_init_f64_vec(rouge_l_recall),
-            rougeL_fmeasure: assume_init_f64_vec(rouge_l_fmeasure),
+            rouge1_precision,
+            rouge1_recall,
+            rouge1_fmeasure,
+            rouge2_precision,
+            rouge2_recall,
+            rouge2_fmeasure,
+            rougeL_precision: rouge_l_precision,
+            rougeL_recall: rouge_l_recall,
+            rougeL_fmeasure: rouge_l_fmeasure,
         },
     )
 }
@@ -231,7 +201,6 @@ fn score_batch_flat(
 fn fast_rouge(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyScore>()?;
     m.add_class::<BatchScoreResult>()?;
-    m.add_function(wrap_pyfunction!(dummy_score, m)?)?;
     m.add_function(wrap_pyfunction!(score, m)?)?;
     m.add_function(wrap_pyfunction!(score_batch, m)?)?;
     m.add_function(wrap_pyfunction!(score_batch_flat, m)?)?;
