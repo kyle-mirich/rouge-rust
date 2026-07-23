@@ -15,6 +15,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Reworked installation, API, benchmarking, and release documentation around verified commands.
 - Removed unsupported drop-in-compatibility and fixed-performance implications from project copy.
 - Updated PyO3 and the locked dependency graph to versions without known RustSec advisories.
+- Updated official GitHub Actions to their current Node 24-based generations.
 
 ## [0.1.10] - 2026-04-03
 
