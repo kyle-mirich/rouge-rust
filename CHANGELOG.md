@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and releases use [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Updated the GitHub Release action to its Node 24-based generation.
+
 ## [0.1.11] - 2026-07-22
 
 ### Added
@@ -23,5 +29,6 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - Simplified the Python bridge and refreshed the public project presentation.
 
+[Unreleased]: https://github.com/kyle-mirich/rouge-rust/compare/v0.1.11...HEAD
 [0.1.11]: https://github.com/kyle-mirich/rouge-rust/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/kyle-mirich/rouge-rust/releases/tag/v0.1.10
