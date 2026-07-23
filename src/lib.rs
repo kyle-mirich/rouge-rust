@@ -10,8 +10,9 @@ use pyo3::types::PyDict;
 use rayon::prelude::*;
 
 #[cfg(not(test))]
-#[pyclass(name = "Score", module = "fast_rouge")]
+#[pyclass(name = "Score", module = "fast_rouge", skip_from_py_object)]
 #[derive(Clone)]
+/// Precision, recall, and F-measure values for one ROUGE metric.
 struct PyScore {
     #[pyo3(get)]
     precision: f64,
@@ -35,6 +36,7 @@ impl From<scorer::Score> for PyScore {
 #[cfg(not(test))]
 #[pyclass(name = "BatchScoreResult", module = "fast_rouge")]
 #[allow(non_snake_case)]
+/// Column-oriented ROUGE scores returned by `score_batch_flat`.
 struct BatchScoreResult {
     #[pyo3(get)]
     rouge1_precision: Vec<f64>,
@@ -84,12 +86,14 @@ fn to_python_dict(py: Python<'_>, scores: ScoreBundle) -> PyResult<Py<PyDict>> {
 }
 
 #[cfg(not(test))]
+/// Score one reference/prediction pair with ROUGE-1, ROUGE-2, and ROUGE-L.
 #[pyfunction]
 fn score(py: Python<'_>, reference: &str, prediction: &str) -> PyResult<Py<PyDict>> {
     to_python_dict(py, compute_scores(reference, prediction))
 }
 
 #[cfg(not(test))]
+/// Score equally sized reference and prediction batches.
 #[pyfunction]
 fn score_batch(
     py: Python<'_>,
@@ -115,6 +119,7 @@ fn score_batch(
 }
 
 #[cfg(not(test))]
+/// Score a batch and return column-oriented metric arrays.
 #[pyfunction]
 fn score_batch_flat(
     py: Python<'_>,
@@ -199,6 +204,7 @@ fn score_batch_flat(
 #[cfg(not(test))]
 #[pymodule]
 fn fast_rouge(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add_class::<PyScore>()?;
     m.add_class::<BatchScoreResult>()?;
     m.add_function(wrap_pyfunction!(score, m)?)?;

@@ -107,6 +107,11 @@ def validate_results(
 
 
 def main() -> None:
+    if PAIR_COUNT < 1:
+        raise ValueError("PAIR_COUNT must be at least 1")
+    if REPEATS < 1:
+        raise ValueError("REPEATS must be at least 1")
+
     references, predictions = make_pairs(PAIR_COUNT)
     scorer = rouge_scorer.RougeScorer(ROUGE_TYPES, use_stemmer=False)
 

@@ -1,0 +1,28 @@
+name: Bug report
+description: Report incorrect scoring, installation problems, or regressions.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve rouge-rust.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Include the rouge-rust, Python, operating system, and architecture versions.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include a small runnable example and the exact input values.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true

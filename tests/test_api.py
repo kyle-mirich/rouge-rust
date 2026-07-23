@@ -12,6 +12,7 @@ def test_score_returns_expected_metrics():
 
 
 def test_public_api_exposes_intended_entrypoints():
+    assert fast_rouge.__version__ == "0.1.11"
     assert not hasattr(fast_rouge, "dummy_score")
     assert hasattr(fast_rouge, "score")
     assert hasattr(fast_rouge, "score_batch")
@@ -38,3 +39,12 @@ def test_batch_apis_validate_input_lengths():
 
     with pytest.raises(ValueError, match="same length"):
         fast_rouge.score_batch_flat(["a"], [])
+
+
+def test_empty_batches_return_empty_results():
+    assert fast_rouge.score_batch([], []) == []
+
+    result = fast_rouge.score_batch_flat([], [])
+    assert result.rouge1_precision == []
+    assert result.rouge2_recall == []
+    assert result.rougeL_fmeasure == []

@@ -38,3 +38,6 @@ dev = [
 
 [tool.maturin]
 module-name = "fast_rouge"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

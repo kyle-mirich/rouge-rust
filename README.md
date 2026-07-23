@@ -1,158 +1,127 @@
 # rouge-rust
 
-`rouge-rust` is a Rust-powered replacement for Google's `rouge-score` Python package.
-It provides matching ROUGE-1, ROUGE-2, and ROUGE-L metrics through a PyO3 extension module,
-with fast batch APIs for large-scale evaluation workloads.
+[![CI](https://github.com/kyle-mirich/rouge-rust/actions/workflows/release.yml/badge.svg)](https://github.com/kyle-mirich/rouge-rust/actions/workflows/release.yml)
+[![PyPI](https://img.shields.io/pypi/v/rouge-rust)](https://pypi.org/project/rouge-rust/)
+[![Python](https://img.shields.io/pypi/pyversions/rouge-rust)](https://pypi.org/project/rouge-rust/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+`rouge-rust` provides fast ROUGE-1, ROUGE-2, and ROUGE-L scoring to Python through a Rust extension. Its scores match `rouge-score` with stemming disabled for the supported metrics, and its batch APIs avoid a Python loop for evaluation workloads.
 
 ## Features
 
-- ROUGE-1, ROUGE-2, and ROUGE-L scoring
-- `score()` for drop-in per-pair scoring
-- `score_batch()` for list-of-dicts batch scoring
-- `score_batch_flat()` for high-throughput struct-of-arrays batch scoring
-- Rust core optimized for large datasets
-- Wheel build and test coverage across Linux, macOS, Windows, and Python 3.9-3.13
+- ROUGE-1 and ROUGE-2 n-gram overlap scores
+- ROUGE-L longest-common-subsequence scores
+- Single-pair and parallel batch APIs
+- A column-oriented batch result for analysis pipelines
+- Exact-reference tests against `rouge-score`
+- Prebuilt wheels for common CPython platforms, with source builds as a fallback
 
 ## Installation
 
-```bash
-pip install rouge-rust
-```
-
-Or with `uv`:
+Install the published package from PyPI:
 
 ```bash
-uv add rouge-rust
+python -m pip install rouge-rust
 ```
 
-## Usage
+The distribution is named `rouge-rust`; the Python module is named `fast_rouge`.
+
+## Quick start
 
 ```python
 import fast_rouge
 
-single = fast_rouge.score("the cat sat", "the cat sat")
-print(single["rouge1"].fmeasure)
-
-batch = fast_rouge.score_batch(
-    ["the cat sat", "hello world"],
-    ["the dog sat", "hello there"],
-)
-print(batch[0]["rougeL"].precision)
-
-flat = fast_rouge.score_batch_flat(
-    ["the cat sat", "hello world"],
-    ["the dog sat", "hello there"],
-)
-print(flat.rouge1_fmeasure[0])
+scores = fast_rouge.score("the cat sat", "the cat sat")
+print(scores["rouge1"].fmeasure)  # 1.0
+print(scores["rouge2"].precision)  # 1.0
+print(scores["rougeL"].recall)  # 1.0
 ```
 
-## Why this project is interesting
+## Batch APIs
 
-- It preserves `rouge-score` parity for ROUGE-1, ROUGE-2, and ROUGE-L without requiring callers to rewrite evaluation logic.
-- It exposes two batch interfaces because throughput and ergonomics are different problems:
-  - `score_batch()` is the easiest drop-in API when you want the same nested result shape as single scoring.
-  - `score_batch_flat()` is optimized for analysis workloads that prefer contiguous metric arrays.
-- The Rust core keeps the hottest work out of Python loops while the test suite checks behavior against the reference implementation.
+`score_batch()` returns the same nested score objects as `score()`:
+
+```python
+results = fast_rouge.score_batch(
+    ["the cat sat", "hello world"],
+    ["the dog sat", "hello there"],
+)
+print(results[0]["rougeL"].fmeasure)
+```
+
+`score_batch_flat()` returns one numeric list per metric field:
+
+```python
+result = fast_rouge.score_batch_flat(
+    ["the cat sat", "hello world"],
+    ["the dog sat", "hello there"],
+)
+print(result.rouge1_precision)
+print(result.rougeL_fmeasure)
+```
+
+Both batch functions require equal-length reference and prediction lists and raise `ValueError` otherwise.
+
+## Supported behavior and limitations
+
+This project implements a focused subset of `rouge-score`: `rouge1`, `rouge2`, and `rougeL` with stemming disabled. It does not implement stemming, `rougeLsum`, bootstrap aggregation, or the full `rouge-score` class API. Tokenization follows the reference package's lowercase ASCII-alphanumeric behavior; non-ASCII characters act as token boundaries.
+
+ROUGE-L uses dynamic programming and memory proportional to the shorter token sequence. Runtime remains proportional to the product of the two sequence lengths, so very long inputs can be expensive.
+
+The package is currently an alpha release. See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## Benchmarking
 
-Run the included benchmark locally:
+The repository includes a reproducible comparison against `rouge-score`:
 
 ```bash
-PAIR_COUNT=100000 REPEATS=3 uv run python benchmark.py
+PAIR_COUNT=10000 REPEATS=3 uv run --extra dev python benchmark.py
 ```
 
-The benchmark:
+The benchmark validates sampled outputs before printing timings. Results depend on the machine, Python version, input shape, and pair count; run it locally instead of treating any single result as a general performance guarantee.
 
-- compares against `rouge-score`
-- measures both batch APIs
-- validates sampled outputs against the Python reference before reporting timings
+## Development
 
-Sample run on the local Apple Silicon development machine with `PAIR_COUNT=10000 REPEATS=1`:
-
-```text
-pair_count: 10000
-repeats: 1
-rouge-score loop: 0.5270s
-fast_rouge.score_batch: 0.0072s
-score_batch speedup: 73.17x
-fast_rouge.score_batch_flat: 0.0048s
-score_batch_flat speedup: 109.60x
-validation: sampled outputs match rouge-score
-```
-
-## Design notes
-
-- Tokenization matches the ASCII-focused normalization behavior used by the parity tests.
-- ROUGE-L uses a dynamic-programming longest common subsequence implementation with memory proportional to the shorter input.
-- The flat batch API uses safe parallel writes, which keeps the implementation easier to audit without changing the result shape.
-
-## Local development
-
-Set up a local environment and install the development dependencies:
+Prerequisites: Python 3.8 or newer, Rust stable, and [`uv`](https://docs.astral.sh/uv/).
 
 ```bash
+git clone https://github.com/kyle-mirich/rouge-rust.git
+cd rouge-rust
 uv venv
-uv pip install -e .[dev]
-uv run maturin develop --release
+uv pip install -e ".[dev]"
 ```
 
-Run tests:
+Run the same quality checks used by CI:
 
 ```bash
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
 cargo test
-uv run pytest -q
+.venv/bin/python -m pytest -q
 ```
 
-Run the benchmark:
+Build and validate release artifacts:
 
 ```bash
-PAIR_COUNT=100000 REPEATS=3 uv run python benchmark.py
+.venv/bin/maturin build --release --sdist -i .venv/bin/python -o dist
+.venv/bin/twine check dist/*
 ```
+
+## Project structure
+
+- `src/scorer.rs`: tokenization and ROUGE algorithms
+- `src/lib.rs`: PyO3 classes and Python-facing functions
+- `tests/`: Python API and reference-parity tests
+- `benchmark.py`: reproducible local benchmark harness
+- `.github/workflows/release.yml`: CI, wheel builds, and trusted publishing
+- [`docs/flows.md`](docs/flows.md): scoring and release flows
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports and focused pull requests are welcome.
+
+Report security issues privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
-This project is released under the MIT License. See [LICENSE](LICENSE).
-
-## Release
-
-Build a source distribution and wheel:
-
-```bash
-uv run maturin build --release --sdist -o dist
-```
-
-Validate the distributions:
-
-```bash
-uv run twine check dist/*
-```
-
-Upload to PyPI:
-
-```bash
-uv run maturin upload dist/*
-```
-
-## GitHub Actions release flow
-
-This repo includes a GitHub Actions pipeline in `.github/workflows/release.yml`.
-
-- pushes and pull requests to `main` and `develop` build and test wheels
-- tags matching `v*` build release artifacts
-- tag builds publish to PyPI and create a GitHub Release
-
-### One-time PyPI setup
-
-Configure PyPI trusted publishing for:
-
-- owner: `kyle-mirich`
-- repository: `rouge-rust`
-- workflow: `release.yml`
-- environment: `pypi`
-
-After that, creating and pushing a tag such as `v0.1.0` will trigger publishing.
+MIT. See [LICENSE](LICENSE).
