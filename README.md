@@ -1,127 +1,135 @@
 # rouge-rust
 
-[![CI](https://github.com/kyle-mirich/rouge-rust/actions/workflows/release.yml/badge.svg)](https://github.com/kyle-mirich/rouge-rust/actions/workflows/release.yml)
+[![CI](https://github.com/kyle-mirich/rouge-rust/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/kyle-mirich/rouge-rust/actions/workflows/release.yml)
 [![PyPI](https://img.shields.io/pypi/v/rouge-rust)](https://pypi.org/project/rouge-rust/)
 [![Python](https://img.shields.io/pypi/pyversions/rouge-rust)](https://pypi.org/project/rouge-rust/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/kyle-mirich/rouge-rust/blob/main/LICENSE)
 
-`rouge-rust` provides fast ROUGE-1, ROUGE-2, and ROUGE-L scoring to Python through a Rust extension. Its scores match `rouge-score` with stemming disabled for the supported metrics, and its batch APIs avoid a Python loop for evaluation workloads.
+Fast **ROUGE-1, ROUGE-2, and ROUGE-L** scoring for Python, implemented in Rust.
+Evaluate one pair or a batch with the same numerical results as Google's
+[`rouge-score`](https://github.com/google-research/google-research/tree/master/rouge)
+for these metrics with stemming disabled and its default tokenizer.
 
-## Features
+- Parallel batch scoring with results in input order.
+- A column-oriented API for analysis pipelines.
+- Rust computation releases the Python GIL in all three APIs.
+- Type hints, no runtime Python dependencies, and MIT licensing.
+- Tested wheels for CPython 3.8–3.14 on Linux (x86-64 and ARM64), macOS
+  (Intel and Apple Silicon), and Windows x64.
 
-- ROUGE-1 and ROUGE-2 n-gram overlap scores
-- ROUGE-L longest-common-subsequence scores
-- Single-pair and parallel batch APIs
-- A column-oriented batch result for analysis pipelines
-- Exact-reference tests against `rouge-score`
-- Prebuilt wheels for common CPython platforms, with source builds as a fallback
+[API reference](https://github.com/kyle-mirich/rouge-rust/blob/main/docs/api.md) · [Benchmarks](https://github.com/kyle-mirich/rouge-rust/blob/main/docs/benchmarking.md) ·
+[Architecture](https://github.com/kyle-mirich/rouge-rust/blob/main/docs/flows.md) · [Contributing](https://github.com/kyle-mirich/rouge-rust/blob/main/CONTRIBUTING.md) · [Changelog](https://github.com/kyle-mirich/rouge-rust/blob/main/CHANGELOG.md)
 
-## Installation
-
-Install the published package from PyPI:
+## Install
 
 ```bash
 python -m pip install rouge-rust
 ```
 
-The distribution is named `rouge-rust`; the Python module is named `fast_rouge`.
+The distribution is named **`rouge-rust`**; import **`fast_rouge`**.
+Prebuilt wheels require no Rust installation. Source builds require Rust 1.88+
+and a C linker. Linux wheels target glibc 2.17+; musl, PyPy, and free-threaded
+Python are not part of the tested wheel matrix.
 
 ## Quick start
 
 ```python
 import fast_rouge
 
-scores = fast_rouge.score("the cat sat", "the cat sat")
-print(scores["rouge1"].fmeasure)  # 1.0
-print(scores["rouge2"].precision)  # 1.0
-print(scores["rougeL"].recall)  # 1.0
+scores = fast_rouge.score("the cat sat", "the cat")
+print(scores["rouge1"].precision)  # 1.0
+print(scores["rouge1"].recall)  # 0.6666666666666666
+print(scores["rouge1"].fmeasure)  # 0.8
 ```
 
-## Batch APIs
+The **reference comes first**, followed by the prediction. Each metric exposes
+read-only `precision`, `recall`, and `fmeasure` floats between 0 and 1.
 
-`score_batch()` returns the same nested score objects as `score()`:
+## Score batches
+
+Choose the result shape that suits your pipeline:
+
+| Function | Result | Use when |
+| --- | --- | --- |
+| `score(reference, prediction)` | Dict of three `Score` objects | Evaluating one pair |
+| `score_batch(references, predictions)` | List of score dicts | Iterating over examples |
+| `score_batch_flat(references, predictions)` | Nine metric columns | Computing statistics or creating a table |
 
 ```python
-results = fast_rouge.score_batch(
-    ["the cat sat", "hello world"],
-    ["the dog sat", "hello there"],
-)
-print(results[0]["rougeL"].fmeasure)
+references = ["the cat sat", "hello world"]
+predictions = ["the dog sat", "hello there"]
+
+results = fast_rouge.score_batch(references, predictions)
+print(results[0]["rougeL"].fmeasure)  # 0.6666666666666666
+
+flat = fast_rouge.score_batch_flat(references, predictions)
+f1 = flat.rouge1_fmeasure
+print(f1)  # [0.6666666666666666, 0.5]
+print(sum(f1) / len(f1))
 ```
 
-`score_batch_flat()` returns one numeric list per metric field:
+Batch inputs must be equal-length sequences of strings; unequal lengths raise
+`ValueError`. Empty batches are valid. Each flat property access creates a
+**new Python list**, so save a column once before looping over its values.
+The batch APIs eagerly consume their inputs; use chunks to bound memory.
+See [API examples](https://github.com/kyle-mirich/rouge-rust/blob/main/docs/api.md) for chunking and DataFrame conversion.
 
-```python
-result = fast_rouge.score_batch_flat(
-    ["the cat sat", "hello world"],
-    ["the dog sat", "hello there"],
-)
-print(result.rouge1_precision)
-print(result.rougeL_fmeasure)
-```
+## Compatibility and limits
 
-Both batch functions require equal-length reference and prediction lists and raise `ValueError` otherwise.
+This is a focused scoring library, not the complete `rouge-score` class API.
+It does not implement stemming, custom tokenizers, `rougeLsum`, multi-reference
+selection, bootstrap confidence intervals, or aggregation.
 
-## Supported behavior and limitations
+Tokenization first lowercases Unicode text, then splits on characters outside
+ASCII `a-z0-9`, matching the reference algorithm. For example, `Kelvin` becomes
+`kelvin`, `İSTANBUL` becomes `i stanbul`, and `café` becomes `caf`. Text with no
+remaining tokens receives zero for every score, including two empty inputs.
+This tokenizer is not suitable for general multilingual evaluation.
 
-This project implements a focused subset of `rouge-score`: `rouge1`, `rouge2`, and `rougeL` with stemming disabled. It does not implement stemming, `rougeLsum`, bootstrap aggregation, or the full `rouge-score` class API. Tokenization follows the reference package's lowercase ASCII-alphanumeric behavior; non-ASCII characters act as token boundaries.
+ROUGE-L takes O(m × n) time and O(min(m, n)) working memory for token sequence
+lengths m and n. Long documents can be expensive. Batch workers use Rayon's
+shared thread pool; set `RAYON_NUM_THREADS` **before starting Python** to bound
+CPU concurrency. The package is still in the 0.1 alpha series.
 
-ROUGE-L uses dynamic programming and memory proportional to the shorter token sequence. Runtime remains proportional to the product of the two sequence lengths, so very long inputs can be expensive.
+## Benchmark
 
-The package is currently an alpha release. See [CHANGELOG.md](CHANGELOG.md) for release history.
-
-## Benchmarking
-
-The repository includes a reproducible comparison against `rouge-score`:
+From a development checkout:
 
 ```bash
-PAIR_COUNT=10000 REPEATS=3 uv run --extra dev python benchmark.py
+uv run --extra dev python benchmark.py --pairs 10000 --repeats 3
 ```
 
-The benchmark validates sampled outputs before printing timings. Results depend on the machine, Python version, input shape, and pair count; run it locally instead of treating any single result as a general performance guarantee.
+The benchmark warms up all paths, compares every score with `rouge-score`, and
+reports median timings. It measures flat scoring both before and after copying
+all nine columns to Python lists. Hardware, input length, and thread count
+matter; [the methodology](https://github.com/kyle-mirich/rouge-rust/blob/main/docs/benchmarking.md) explains how to reproduce and
+interpret results.
 
-## Development
+## Develop
 
-Prerequisites: Python 3.8 or newer, Rust stable, and [`uv`](https://docs.astral.sh/uv/).
+Install Python, Rust 1.88+, and [`uv`](https://docs.astral.sh/uv/), then:
 
 ```bash
 git clone https://github.com/kyle-mirich/rouge-rust.git
 cd rouge-rust
-uv venv
-uv pip install -e ".[dev]"
-```
-
-Run the same quality checks used by CI:
-
-```bash
+uv venv --python 3.13
+uv pip install -e '.[dev]'
 cargo fmt --check
-cargo clippy --all-targets -- -D warnings
-cargo test
-.venv/bin/python -m pytest -q
+cargo clippy --all-targets --locked -- -D warnings
+cargo test --locked
+uv run --extra dev ruff check .
+uv run --extra dev ruff format --check .
+uv run --extra dev pytest -q
 ```
 
-Build and validate release artifacts:
+Rebuild after Rust edits with `uv pip install -e '.[dev]'`. See
+[CONTRIBUTING.md](https://github.com/kyle-mirich/rouge-rust/blob/main/CONTRIBUTING.md) for testing guidance and
+[the release guide](https://github.com/kyle-mirich/rouge-rust/blob/main/docs/releasing.md) for packaging and trusted publishing.
 
-```bash
-.venv/bin/maturin build --release --sdist -i .venv/bin/python -o dist
-.venv/bin/twine check dist/*
-```
+## Community and license
 
-## Project structure
+Bug reports and focused pull requests are welcome. Follow the
+[contribution guide](https://github.com/kyle-mirich/rouge-rust/blob/main/CONTRIBUTING.md) and [code of conduct](https://github.com/kyle-mirich/rouge-rust/blob/main/CODE_OF_CONDUCT.md).
+Report vulnerabilities privately through [the security policy](https://github.com/kyle-mirich/rouge-rust/blob/main/SECURITY.md).
 
-- `src/scorer.rs`: tokenization and ROUGE algorithms
-- `src/lib.rs`: PyO3 classes and Python-facing functions
-- `tests/`: Python API and reference-parity tests
-- `benchmark.py`: reproducible local benchmark harness
-- `.github/workflows/release.yml`: CI, wheel builds, and trusted publishing
-- [`docs/flows.md`](docs/flows.md): scoring and release flows
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports and focused pull requests are welcome.
-
-Report security issues privately as described in [SECURITY.md](SECURITY.md).
-
-## License
-
-MIT. See [LICENSE](LICENSE).
+Released under the [MIT License](https://github.com/kyle-mirich/rouge-rust/blob/main/LICENSE).

@@ -71,3 +71,7 @@ docs/_build/
 # Pyenv
 .python-version
 uv.lock
+
+# Python lint and typing caches
+.ruff_cache/
+.mypy_cache/

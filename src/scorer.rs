@@ -1,19 +1,13 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use rustc_hash::FxHashMap as HashMap;
 
-thread_local! {
-    static TOKEN_CACHE: RefCell<Vec<CacheEntry>> = const { RefCell::new(Vec::new()) };
-    static SCORE_CACHE: RefCell<Option<PairScoreCache>> = const { RefCell::new(None) };
-}
-
-const TOKEN_CACHE_SIZE: usize = 4;
-
+/// Precision, recall, and F1 for a single metric.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Score {
+    /// Fraction of prediction units that match the reference.
     pub precision: f64,
+    /// Fraction of reference units matched by the prediction.
     pub recall: f64,
+    /// Harmonic mean of precision and recall (F1).
     pub fmeasure: f64,
 }
 
@@ -27,30 +21,11 @@ impl Score {
     }
 }
 
-#[derive(Debug, Hash, Eq, PartialEq)]
-enum NgramKey<'a> {
-    Unigram(&'a str),
-    Bigram(&'a str, &'a str),
-    Higher(Vec<&'a str>),
-}
-
-#[derive(Clone)]
-struct CacheEntry {
-    text: String,
-    tokenized: Rc<TokenizedText>,
-}
-
 #[derive(Clone, Copy)]
 struct ScoreSet {
     rouge1: Score,
     rouge2: Score,
     rouge_l: Score,
-}
-
-struct PairScoreCache {
-    reference: String,
-    prediction: String,
-    scores: ScoreSet,
 }
 
 struct TokenizedText {
@@ -80,53 +55,30 @@ impl TokenizedText {
     }
 }
 
+/// Lowercase Unicode, then split on everything outside ASCII `a-z0-9`.
 pub fn tokenize(text: &str) -> Vec<String> {
     tokenize_tokenized(text).to_owned_tokens()
 }
 
+/// Count overlapping n-grams without computing unrelated metrics.
+/// Returns zero when `n == 0` or either input has fewer than `n` tokens.
 pub fn rouge_n(reference: &str, prediction: &str, n: usize) -> Score {
     if n == 0 {
         return Score::zero();
     }
-
-    if let Some(scores) = cached_scores(reference, prediction) {
-        return match n {
-            1 => scores.rouge1,
-            2 => scores.rouge2,
-            _ => {
-                let reference_tokens = tokenize_cached(reference);
-                let prediction_tokens = tokenize_cached(prediction);
-                rouge_n_tokenized(&reference_tokens, &prediction_tokens, n)
-            }
-        };
-    }
-
-    let reference_tokens = tokenize_cached(reference);
-    let prediction_tokens = tokenize_cached(prediction);
-
-    if n == 1 || n == 2 {
-        let scores = score_set(&reference_tokens, &prediction_tokens);
-        store_scores(reference, prediction, scores);
-
-        return if n == 1 { scores.rouge1 } else { scores.rouge2 };
-    }
-
+    let reference_tokens = tokenize_tokenized(reference);
+    let prediction_tokens = tokenize_tokenized(prediction);
     rouge_n_tokenized(&reference_tokens, &prediction_tokens, n)
 }
 
+/// Score the longest common subsequence of two normalized inputs.
 pub fn rouge_l(reference: &str, prediction: &str) -> Score {
-    if let Some(scores) = cached_scores(reference, prediction) {
-        return scores.rouge_l;
-    }
-
-    let reference_tokens = tokenize_cached(reference);
-    let prediction_tokens = tokenize_cached(prediction);
-    let scores = score_set(&reference_tokens, &prediction_tokens);
-    store_scores(reference, prediction, scores);
-
-    scores.rouge_l
+    let reference_tokens = tokenize_tokenized(reference);
+    let prediction_tokens = tokenize_tokenized(prediction);
+    rouge_l_tokenized(&reference_tokens, &prediction_tokens)
 }
 
+/// Compute ROUGE-1, ROUGE-2, and ROUGE-L while tokenizing each input once.
 pub fn score_all(reference: &str, prediction: &str) -> (Score, Score, Score) {
     let reference_tokens = tokenize_tokenized(reference);
     let prediction_tokens = tokenize_tokenized(prediction);
@@ -135,6 +87,8 @@ pub fn score_all(reference: &str, prediction: &str) -> (Score, Score, Score) {
     (scores.rouge1, scores.rouge2, scores.rouge_l)
 }
 
+/// Score pre-tokenized n-grams without further normalization.
+/// A zero `n` or a sequence shorter than `n` yields zero scores.
 pub fn rouge_n_tokens<T: AsRef<str>>(
     reference_tokens: &[T],
     prediction_tokens: &[T],
@@ -166,6 +120,7 @@ pub fn rouge_n_tokens<T: AsRef<str>>(
     score_from_counts(overlap, reference_total, prediction_total)
 }
 
+/// Score a longest common subsequence without normalizing the supplied tokens.
 pub fn rouge_l_tokens<T: AsRef<str>>(reference_tokens: &[T], prediction_tokens: &[T]) -> Score {
     if reference_tokens.is_empty() || prediction_tokens.is_empty() {
         return Score::zero();
@@ -175,6 +130,7 @@ pub fn rouge_l_tokens<T: AsRef<str>>(reference_tokens: &[T], prediction_tokens: 
     score_from_counts(lcs, reference_tokens.len(), prediction_tokens.len())
 }
 
+/// Longest common subsequence length, with O(min(m, n)) memory and O(m * n) time.
 pub fn lcs_len<T: AsRef<str>>(reference_tokens: &[T], prediction_tokens: &[T]) -> usize {
     if reference_tokens.is_empty() || prediction_tokens.is_empty() {
         return 0;
@@ -206,31 +162,18 @@ pub fn lcs_len<T: AsRef<str>>(reference_tokens: &[T], prediction_tokens: &[T]) -
     previous[column_tokens.len()]
 }
 
-fn tokenize_cached(text: &str) -> Rc<TokenizedText> {
-    TOKEN_CACHE.with(|cache| {
-        let mut cache = cache.borrow_mut();
-
-        if let Some(entry) = cache.iter().find(|entry| entry.text == text) {
-            return Rc::clone(&entry.tokenized);
-        }
-
-        let tokenized = Rc::new(tokenize_tokenized(text));
-
-        if cache.len() == TOKEN_CACHE_SIZE {
-            cache.remove(0);
-        }
-
-        cache.push(CacheEntry {
-            text: text.to_owned(),
-            tokenized: Rc::clone(&tokenized),
-        });
-
-        tokenized
-    })
-}
-
 fn tokenize_tokenized(text: &str) -> TokenizedText {
-    let mut normalized = Vec::with_capacity(text.len());
+    // Lowercase before filtering, as rouge-score does. Unicode characters such
+    // as Kelvin sign (K) and dotted capital I (İ) can lowercase to ASCII.
+    // ASCII text takes the single-pass path below.
+    let lowered;
+    let text = if text.is_ascii() {
+        text
+    } else {
+        lowered = text.to_lowercase();
+        &lowered
+    };
+    let mut normalized = String::with_capacity(text.len());
     let mut spans = Vec::with_capacity(estimated_token_capacity(text));
     let mut token_start = None;
 
@@ -242,7 +185,7 @@ fn tokenize_tokenized(text: &str) -> TokenizedText {
         };
 
         let index = normalized.len();
-        normalized.push(output);
+        normalized.push(char::from(output));
 
         if output == b' ' {
             if let Some(start) = token_start.take() {
@@ -257,10 +200,7 @@ fn tokenize_tokenized(text: &str) -> TokenizedText {
         spans.push((start, normalized.len()));
     }
 
-    TokenizedText {
-        normalized: unsafe { String::from_utf8_unchecked(normalized) },
-        spans,
-    }
+    TokenizedText { normalized, spans }
 }
 
 fn estimated_token_capacity(text: &str) -> usize {
@@ -310,20 +250,17 @@ fn rouge1_tokenized(reference_tokens: &TokenizedText, prediction_tokens: &Tokeni
         return Score::zero();
     }
 
-    let mut counts = HashMap::with_capacity_and_hasher(reference_total, Default::default());
+    let mut counts: HashMap<&str, usize> =
+        HashMap::with_capacity_and_hasher(reference_total, Default::default());
 
     for index in 0..reference_tokens.len() {
-        *counts
-            .entry(NgramKey::Unigram(reference_tokens.token(index)))
-            .or_insert(0) += 1;
+        *counts.entry(reference_tokens.token(index)).or_insert(0) += 1;
     }
 
     let mut overlap = 0;
 
     for index in 0..prediction_tokens.len() {
-        let key = NgramKey::Unigram(prediction_tokens.token(index));
-
-        if let Some(count) = counts.get_mut(&key)
+        if let Some(count) = counts.get_mut(prediction_tokens.token(index))
             && *count > 0
         {
             *count -= 1;
@@ -342,11 +279,12 @@ fn rouge2_tokenized(reference_tokens: &TokenizedText, prediction_tokens: &Tokeni
         return Score::zero();
     }
 
-    let mut counts = HashMap::with_capacity_and_hasher(reference_total, Default::default());
+    let mut counts: HashMap<(&str, &str), usize> =
+        HashMap::with_capacity_and_hasher(reference_total, Default::default());
 
     for index in 0..(reference_tokens.len() - 1) {
         *counts
-            .entry(NgramKey::Bigram(
+            .entry((
                 reference_tokens.token(index),
                 reference_tokens.token(index + 1),
             ))
@@ -356,7 +294,7 @@ fn rouge2_tokenized(reference_tokens: &TokenizedText, prediction_tokens: &Tokeni
     let mut overlap = 0;
 
     for index in 0..(prediction_tokens.len() - 1) {
-        let key = NgramKey::Bigram(
+        let key = (
             prediction_tokens.token(index),
             prediction_tokens.token(index + 1),
         );
@@ -380,18 +318,17 @@ fn rouge1_tokens<T: AsRef<str>>(reference_tokens: &[T], prediction_tokens: &[T])
         return Score::zero();
     }
 
-    let mut counts = HashMap::with_capacity_and_hasher(reference_total, Default::default());
+    let mut counts: HashMap<&str, usize> =
+        HashMap::with_capacity_and_hasher(reference_total, Default::default());
 
     for token in reference_tokens {
-        *counts.entry(NgramKey::Unigram(token.as_ref())).or_insert(0) += 1;
+        *counts.entry(token.as_ref()).or_insert(0) += 1;
     }
 
     let mut overlap = 0;
 
     for token in prediction_tokens {
-        let key = NgramKey::Unigram(token.as_ref());
-
-        if let Some(count) = counts.get_mut(&key)
+        if let Some(count) = counts.get_mut(token.as_ref())
             && *count > 0
         {
             *count -= 1;
@@ -410,18 +347,19 @@ fn rouge2_tokens<T: AsRef<str>>(reference_tokens: &[T], prediction_tokens: &[T])
         return Score::zero();
     }
 
-    let mut counts = HashMap::with_capacity_and_hasher(reference_total, Default::default());
+    let mut counts: HashMap<(&str, &str), usize> =
+        HashMap::with_capacity_and_hasher(reference_total, Default::default());
 
     for window in reference_tokens.windows(2) {
         *counts
-            .entry(NgramKey::Bigram(window[0].as_ref(), window[1].as_ref()))
+            .entry((window[0].as_ref(), window[1].as_ref()))
             .or_insert(0) += 1;
     }
 
     let mut overlap = 0;
 
     for window in prediction_tokens.windows(2) {
-        let key = NgramKey::Bigram(window[0].as_ref(), window[1].as_ref());
+        let key = (window[0].as_ref(), window[1].as_ref());
 
         if let Some(count) = counts.get_mut(&key)
             && *count > 0
@@ -476,117 +414,37 @@ fn lcs_len_tokenized(reference_tokens: &TokenizedText, prediction_tokens: &Token
     previous[cols.len()]
 }
 
-fn cached_scores(reference: &str, prediction: &str) -> Option<ScoreSet> {
-    SCORE_CACHE.with(|cache| {
-        cache
-            .borrow()
-            .as_ref()
-            .filter(|entry| entry.reference == reference && entry.prediction == prediction)
-            .map(|entry| entry.scores)
-    })
-}
-
-fn store_scores(reference: &str, prediction: &str, scores: ScoreSet) {
-    SCORE_CACHE.with(|cache| {
-        *cache.borrow_mut() = Some(PairScoreCache {
-            reference: reference.to_owned(),
-            prediction: prediction.to_owned(),
-            scores,
-        });
-    });
-}
-
 fn total_ngrams(token_count: usize, n: usize) -> usize {
     token_count
         .checked_sub(n)
         .map_or(0, |remaining| remaining + 1)
 }
 
-fn ngram_counts_tokenized<'a>(tokens: &'a TokenizedText, n: usize) -> HashMap<NgramKey<'a>, usize> {
-    let mut counts =
-        HashMap::with_capacity_and_hasher(total_ngrams(tokens.len(), n), Default::default());
-
-    if tokens.len() < n {
-        return counts;
+fn ngram_counts_tokenized(tokens: &TokenizedText, n: usize) -> HashMap<Vec<&str>, usize> {
+    let total = total_ngrams(tokens.len(), n);
+    let mut counts = HashMap::with_capacity_and_hasher(total, Default::default());
+    for start in 0..total {
+        let key = (start..start + n)
+            .map(|index| tokens.token(index))
+            .collect();
+        *counts.entry(key).or_insert(0) += 1;
     }
-
-    match n {
-        1 => {
-            for index in 0..tokens.len() {
-                *counts
-                    .entry(NgramKey::Unigram(tokens.token(index)))
-                    .or_insert(0) += 1;
-            }
-        }
-        2 => {
-            for index in 0..(tokens.len() - 1) {
-                *counts
-                    .entry(NgramKey::Bigram(
-                        tokens.token(index),
-                        tokens.token(index + 1),
-                    ))
-                    .or_insert(0) += 1;
-            }
-        }
-        _ => {
-            for start in 0..=tokens.len() - n {
-                let mut key = Vec::with_capacity(n);
-
-                for offset in 0..n {
-                    key.push(tokens.token(start + offset));
-                }
-
-                *counts.entry(NgramKey::Higher(key)).or_insert(0) += 1;
-            }
-        }
-    }
-
     counts
 }
 
-fn ngram_counts_from_slice<'a, T: AsRef<str>>(
-    tokens: &'a [T],
-    n: usize,
-) -> HashMap<NgramKey<'a>, usize> {
+fn ngram_counts_from_slice<T: AsRef<str>>(tokens: &[T], n: usize) -> HashMap<Vec<&str>, usize> {
     let mut counts =
         HashMap::with_capacity_and_hasher(total_ngrams(tokens.len(), n), Default::default());
-
-    if tokens.len() < n {
-        return counts;
+    for window in tokens.windows(n) {
+        let key = window.iter().map(AsRef::as_ref).collect();
+        *counts.entry(key).or_insert(0) += 1;
     }
-
-    match n {
-        1 => {
-            for token in tokens {
-                *counts.entry(NgramKey::Unigram(token.as_ref())).or_insert(0) += 1;
-            }
-        }
-        2 => {
-            for window in tokens.windows(2) {
-                *counts
-                    .entry(NgramKey::Bigram(window[0].as_ref(), window[1].as_ref()))
-                    .or_insert(0) += 1;
-            }
-        }
-        _ => {
-            for window in tokens.windows(n) {
-                let mut key = Vec::with_capacity(n);
-
-                for token in window {
-                    key.push(token.as_ref());
-                }
-
-                *counts.entry(NgramKey::Higher(key)).or_insert(0) += 1;
-            }
-        }
-    }
-
     counts
 }
 
 fn overlap_count(
-    reference_counts: &HashMap<NgramKey<'_>, usize>,
-    prediction_counts: &HashMap<NgramKey<'_>, usize>,
+    reference_counts: &HashMap<Vec<&str>, usize>,
+    prediction_counts: &HashMap<Vec<&str>, usize>,
 ) -> usize {
     reference_counts
         .iter()
@@ -620,7 +478,9 @@ fn score_from_counts(overlap: usize, reference_total: usize, prediction_total: u
 
 #[cfg(test)]
 mod tests {
-    use super::{Score, lcs_len, rouge_l, rouge_n, score_all, tokenize};
+    use super::{
+        Score, lcs_len, rouge_l, rouge_l_tokens, rouge_n, rouge_n_tokens, score_all, tokenize,
+    };
 
     fn assert_score_close(actual: Score, expected: Score) {
         let epsilon = 1e-12;
@@ -733,5 +593,91 @@ mod tests {
 
         assert_score_close(first, expected);
         assert_score_close(second, expected);
+    }
+
+    #[test]
+    fn unicode_lowercasing_precedes_ascii_filtering() {
+        assert_eq!(
+            tokenize("Kelvin İSTANBUL aİb"),
+            vec!["kelvin", "i", "stanbul", "ai", "b"]
+        );
+        assert!(tokenize("你好 🌎 ＡＢＣ").is_empty());
+        assert_eq!(tokenize("a\0b\tC"), vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn higher_order_ngrams_count_multiplicity_and_handle_extreme_n() {
+        let reference = ["a", "a", "a", "a"];
+        let prediction = ["a", "a", "a", "b", "b"];
+        let expected = Score {
+            precision: 1.0 / 3.0,
+            recall: 0.5,
+            fmeasure: 0.4,
+        };
+        assert_score_close(rouge_n_tokens(&reference, &prediction, 3), expected);
+        assert_score_close(rouge_n("a a a a", "a a a b b", 3), expected);
+        for n in [0, 6, usize::MAX] {
+            assert_eq!(rouge_n_tokens(&reference, &prediction, n), Score::zero());
+            assert_eq!(rouge_n("a a a a", "a a a b b", n), Score::zero());
+        }
+    }
+
+    #[test]
+    fn text_and_token_apis_agree() {
+        for (reference, prediction) in [("", "a"), ("a b a", "b a"), ("İ K café", "i k caf")] {
+            let a = tokenize(reference);
+            let b = tokenize(prediction);
+            for n in 0..=5 {
+                assert_eq!(rouge_n(reference, prediction, n), rouge_n_tokens(&a, &b, n));
+            }
+            assert_eq!(rouge_l(reference, prediction), rouge_l_tokens(&a, &b));
+            let scores = score_all(reference, prediction);
+            assert_eq!(scores.0, rouge_n_tokens(&a, &b, 1));
+            assert_eq!(scores.1, rouge_n_tokens(&a, &b, 2));
+            assert_eq!(scores.2, rouge_l_tokens(&a, &b));
+        }
+    }
+
+    #[test]
+    fn lcs_matches_brute_force_for_all_short_binary_sequences() {
+        // This oracle enumerates subsequences instead of repeating the DP algorithm.
+        let mut sequences = Vec::new();
+        for len in 0..=5 {
+            for bits in 0..1usize << len {
+                sequences.push(
+                    (0..len)
+                        .map(|i| if bits & (1 << i) == 0 { "a" } else { "b" })
+                        .collect::<Vec<_>>(),
+                );
+            }
+        }
+        for a in &sequences {
+            for b in &sequences {
+                let mut expected = 0;
+                for mask in 0..1usize << a.len() {
+                    let subsequence: Vec<_> = a
+                        .iter()
+                        .enumerate()
+                        .filter(|(i, _)| mask & (1 << i) != 0)
+                        .map(|(_, token)| token)
+                        .collect();
+                    let mut rest = b.iter();
+                    if subsequence
+                        .iter()
+                        .all(|token| rest.any(|other| other == *token))
+                    {
+                        expected = expected.max(subsequence.len());
+                    }
+                }
+                assert_eq!(lcs_len(a, b), expected, "{a:?} vs {b:?}");
+                let score = score_all(&a.join(" "), &b.join(" ")).2;
+                let expected_precision = if b.is_empty() {
+                    0.0
+                } else {
+                    expected as f64 / b.len() as f64
+                };
+                assert_eq!(score.precision, expected_precision);
+            }
+        }
     }
 }

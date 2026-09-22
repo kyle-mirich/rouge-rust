@@ -2,57 +2,80 @@ name: CI and Release
 
 on:
   push:
-    branches:
-      - main
-      - develop
-    tags:
-      - "v*"
+    branches: [main, develop]
+    tags: ["v*"]
   pull_request:
-    branches:
-      - main
-      - develop
+    branches: [main, develop]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   quality:
     name: Quality checks
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
-
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           components: rustfmt, clippy
-
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
-          python-version: "3.11"
-
-      - name: Install Python test tooling
+          python-version: "3.13"
+      - name: Install package and development tools
+        run: python -m pip install '.[dev]'
+      - name: Check Rust and Python style
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install maturin pytest rouge-score
-
-      - name: Check formatting
-        run: cargo fmt --check
-
-      - name: Run clippy
-        run: cargo clippy --all-targets -- -D warnings
-
-      - name: Run Rust tests
-        run: cargo test
-
-      - name: Build local extension and run Python tests
+          cargo fmt --check
+          cargo clippy --all-targets --locked -- -D warnings
+          ruff check .
+          ruff format --check .
+      - name: Test core, extension, and type information
         run: |
-          python -m pip install . --force-reinstall
+          cargo test --locked
           pytest -q
+          python scripts/check_release.py
+          python -m pip install mypy
+          python -m mypy.stubtest fast_rouge --allowlist scripts/stubtest-allowlist.txt
+      - name: Build Rust documentation
+        run: cargo doc --locked --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+      - name: Smoke-test benchmark
+        run: python benchmark.py --pairs 100 --repeats 1
+
+  msrv:
+    name: Minimum Rust 1.88
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: "1.88.0"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.13"
+      - run: cargo test --locked
+      - run: cargo check --locked
 
   build-native:
-    name: Build ${{ matrix.platform.name }} py${{ matrix.python-version }}
+    name: Wheel ${{ matrix.platform.name }} py${{ matrix.python-version }}
     runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -60,158 +83,158 @@ jobs:
           - name: linux-x86_64
             runner: ubuntu-latest
             target: x86_64
-            manylinux: auto
-            args: --release --out dist --zig -i python
-            test: true
+            args: --release --locked --out dist --zig --compatibility manylinux2014 -i python
+          - name: linux-aarch64
+            runner: ubuntu-24.04-arm
+            target: aarch64
+            args: --release --locked --out dist --zig --compatibility manylinux2014 -i python
           - name: windows-x64
             runner: windows-latest
             target: x64
-            args: --release --out dist -i python
-            test: true
+            args: --release --locked --out dist -i python
           - name: macos-x86_64
             runner: macos-15-intel
             target: x86_64
-            args: --release --out dist -i python
-            test: true
-          - name: macos-aarch64
+            args: --release --locked --out dist -i python
+          - name: macos-arm64
             runner: macos-14
             target: aarch64
-            args: --release --out dist -i python
-            test: true
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-
+            args: --release --locked --out dist -i python
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: ${{ matrix.python-version }}
-
-      - name: Build wheels
-        if: ${{ matrix.platform.manylinux }}
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.platform.target }}
-          manylinux: ${{ matrix.platform.manylinux }}
-          args: ${{ matrix.platform.args }}
-
-      - name: Build wheels
-        if: ${{ !matrix.platform.manylinux }}
-        uses: PyO3/maturin-action@v1
+      - name: Build wheel
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           target: ${{ matrix.platform.target }}
           args: ${{ matrix.platform.args }}
-
-      - name: Upload wheels
-        uses: actions/upload-artifact@v6
-        with:
-          name: wheels-${{ matrix.platform.name }}-py${{ matrix.python-version }}
-          path: dist
-
-      - name: Install wheel and run tests
-        if: ${{ matrix.platform.test }}
+          maturin-version: "v1.15.0"
+      - name: Install wheel and run all Python tests
         shell: bash
         run: |
-          python -m pip install --upgrade pip
           python -m pip install --no-index --find-links dist rouge-rust --force-reinstall
-          python -m pip install pytest rouge-score
-          pytest -q
-
-  build-linux-aarch64:
-    name: Build linux-aarch64
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-python@v6
+          python -m pip install pytest rouge-score==0.1.2
+          python -m pytest -q
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          python-version: "3.11"
-
-      - name: Build wheels
-        uses: PyO3/maturin-action@v1
-        with:
-          target: aarch64
-          manylinux: auto
-          args: --release --out dist --find-interpreter --zig
-
-      - name: Upload wheels
-        uses: actions/upload-artifact@v6
-        with:
-          name: wheels-linux-aarch64
-          path: dist
+          name: packages-${{ matrix.platform.name }}-py${{ matrix.python-version }}
+          path: dist/*.whl
+          if-no-files-found: error
 
   sdist:
-    name: Build sdist
+    name: Build and test source distribution
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.13"
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
       - name: Build sdist
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           command: sdist
-          args: --out dist
-
-      - name: Upload sdist
-        uses: actions/upload-artifact@v6
+          args: --locked --out dist
+          maturin-version: "v1.15.0"
+      - name: Install from the sdist and test
+        run: |
+          python -m pip install dist/*.tar.gz pytest rouge-score==0.1.2
+          python -m pytest -q
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: sdist
+          name: packages-sdist
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  validate:
+    name: Validate release artifacts
+    needs: [quality, msrv, build-native, sdist]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: packages-*
+          merge-multiple: true
           path: dist
+      - name: Validate metadata, versions, typing files, and full wheel matrix
+        run: |
+          python -m pip install twine
+          python -m twine check --strict dist/*
+          python scripts/check_release.py --dist dist --complete
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-dist
+          path: dist/*
+          if-no-files-found: error
 
   publish:
     name: Publish to PyPI
-    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-    needs:
-      - quality
-      - build-native
-      - build-linux-aarch64
-      - sdist
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: validate
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment:
       name: pypi
       url: https://pypi.org/p/rouge-rust
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
-          path: dist-artifacts
-
-      - name: Flatten artifacts
-        shell: bash
-        run: |
-          mkdir -p dist
-          find dist-artifacts -type f \( -name '*.whl' -o -name '*.tar.gz' \) -exec cp {} dist/ \;
-
+          name: release-dist
+          path: dist
       - name: Publish package distributions to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
         with:
           packages-dir: dist
 
   github-release:
     name: Create GitHub release
-    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-    needs:
-      - quality
-      - build-native
-      - build-linux-aarch64
-      - sdist
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: publish
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          path: dist-artifacts
-
-      - name: Flatten artifacts
-        shell: bash
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: release-dist
+          path: dist
+      - name: Prepare release notes and checksums
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          mkdir -p dist
-          find dist-artifacts -type f \( -name '*.whl' -o -name '*.tar.gz' \) -exec cp {} dist/ \;
-
-      - name: Create GitHub release
-        uses: softprops/action-gh-release@v3
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          version = os.environ["RELEASE_TAG"].removeprefix("v")
+          changelog = Path("CHANGELOG.md").read_text()
+          section = changelog.split(f"## [{version}] - ", 1)[1].split("\n## [", 1)[0]
+          notes = section.split("\n", 1)[1].strip()
+          Path("release-notes.md").write_text(notes + "\n")
+          PY
+          (cd dist && sha256sum -- *.whl *.tar.gz > SHA256SUMS)
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           files: dist/*
-          generate_release_notes: true
+          body_path: release-notes.md
+          fail_on_unmatched_files: true

@@ -1,0 +1,3 @@
+# Maturin's generated package exposes its internal extension submodule.
+# The supported public surface is fully typed and checked at fast_rouge.*.
+fast_rouge\.fast_rouge

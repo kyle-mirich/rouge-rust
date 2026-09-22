@@ -1,0 +1,23 @@
+name: Feature request
+description: Propose a focused addition or compatibility improvement.
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use case
+      description: What task is difficult with the existing APIs? Include an example.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the expected API or behavior and any alternatives considered.
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and performance
+      description: Note relevant rouge-score behavior, input sizes, or platform requirements.

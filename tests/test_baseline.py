@@ -2,7 +2,6 @@ from rouge_score import rouge_scorer
 
 import fast_rouge
 
-
 CASES = [
     ("", ""),
     ("", "non empty prediction"),
@@ -45,10 +44,7 @@ def test_score_batch_matches_iterative_score() -> None:
     predictions = [prediction for _, prediction in CASES]
 
     batch_scores = fast_rouge.score_batch(references, predictions)
-    iterative_scores = [
-        fast_rouge.score(reference, prediction)
-        for reference, prediction in CASES
-    ]
+    iterative_scores = [fast_rouge.score(reference, prediction) for reference, prediction in CASES]
 
     assert len(batch_scores) == len(iterative_scores)
 
@@ -66,10 +62,7 @@ def test_score_batch_flat_matches_iterative_score() -> None:
     predictions = [prediction for _, prediction in CASES]
 
     batch_scores = fast_rouge.score_batch_flat(references, predictions)
-    iterative_scores = [
-        fast_rouge.score(reference, prediction)
-        for reference, prediction in CASES
-    ]
+    iterative_scores = [fast_rouge.score(reference, prediction) for reference, prediction in CASES]
 
     assert len(batch_scores.rouge1_precision) == len(iterative_scores)
     assert len(batch_scores.rouge2_precision) == len(iterative_scores)
