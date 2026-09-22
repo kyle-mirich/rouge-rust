@@ -142,7 +142,7 @@ jobs:
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           command: sdist
-          args: --locked --out dist
+          args: --out dist
           maturin-version: "v1.15.0"
       - name: Install from the sdist and test
         run: |
