@@ -6,9 +6,11 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/kyle-mirich/rouge-rust/blob/main/LICENSE)
 
 Fast **ROUGE-1, ROUGE-2, and ROUGE-L** scoring for Python, implemented in Rust.
-Evaluate one pair or a batch with the same numerical results as Google's
-[`rouge-score`](https://github.com/google-research/google-research/tree/master/rouge)
-for these metrics with stemming disabled and its default tokenizer.
+Evaluate one pair or a batch, targeting the numerical results of Google's
+[`rouge-score` 0.1.2](https://github.com/google-research/google-research/tree/master/rouge)
+for these metrics with stemming disabled and its default
+tokenizer. [Correctness evidence and variant definitions](docs/correctness.md)
+describe the tested settings and boundaries.
 
 - Parallel batch scoring with results in input order.
 - A column-oriented API for analysis pipelines.
@@ -19,6 +21,10 @@ for these metrics with stemming disabled and its default tokenizer.
 
 [API reference](https://github.com/kyle-mirich/rouge-rust/blob/main/docs/api.md) · [Benchmarks](https://github.com/kyle-mirich/rouge-rust/blob/main/docs/benchmarking.md) ·
 [Architecture](https://github.com/kyle-mirich/rouge-rust/blob/main/docs/flows.md) · [Contributing](https://github.com/kyle-mirich/rouge-rust/blob/main/CONTRIBUTING.md) · [Changelog](https://github.com/kyle-mirich/rouge-rust/blob/main/CHANGELOG.md)
+
+Try the [runnable JSONL demo](docs/demo.md) to see complete, shortened, reordered,
+and empty predictions evaluated without an external service.
+The [project brief](docs/project-brief.md) links implementation and verification evidence.
 
 ## Install
 
@@ -96,14 +102,22 @@ CPU concurrency. The package is still in the 0.1 alpha series.
 From a development checkout:
 
 ```bash
-uv run --extra dev python benchmark.py --pairs 10000 --repeats 3
+RAYON_NUM_THREADS=1 .venv/bin/python benchmark.py --pairs 10000 --repeats 5 --json-output /tmp/rouge-benchmark.json
 ```
 
 The benchmark warms up all paths, compares every score with `rouge-score`, and
-reports median timings. It measures flat scoring both before and after copying
-all nine columns to Python lists. Hardware, input length, and thread count
+reports median timings and raw samples, input fingerprints, and environment
+metadata in an optional JSON report. It measures sequential native calls and
+flat scoring both before and after copying all nine columns to Python lists.
+Hardware, input length, and thread count
 matter; [the methodology](https://github.com/kyle-mirich/rouge-rust/blob/main/docs/benchmarking.md) explains how to reproduce and
 interpret results.
+
+[Benchmark verification](docs/benchmark-results.md) records validated short,
+long, and single-pair workloads with reproducible input fingerprints. Timing
+experiments in this pass ran on a busy shared workstation, so they support no
+public performance claim. Use the methodology to measure your workload under
+controlled conditions before choosing an API or reporting a speedup.
 
 ## Develop
 

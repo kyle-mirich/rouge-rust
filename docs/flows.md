@@ -9,6 +9,8 @@
 | `src/python.rs` | PyO3 conversion, result classes, GIL boundaries, Rayon batches |
 | `fast_rouge.pyi` | Public Python type information |
 | `tests/` | Installed-extension behavior and differential tests |
+| `examples/score_jsonl.py` | Streaming JSONL demo using bounded flat batches |
+| `benchmark.py` | Exact-reference validation, rotated timing paths, JSON evidence |
 | `scripts/check_release.py` | Version, artifact, and wheel-matrix validation |
 
 The Cargo package is the build unit for a Python extension (`cdylib`); this
@@ -46,6 +48,8 @@ limits appropriate to their workloads.
   on curated edge cases and seeded randomized pairs. API tests cover ordering,
   input validation, read-only properties, list copies, version metadata, and
   concurrent Python callers with a deadlock timeout.
+- Hand-counted examples and all 961 short binary text pairs exercise the installed
+  production path through all three APIs; see [correctness.md](correctness.md).
 - CI checks formatting, Clippy, Python lint, Rust documentation, and installed
   type stubs. It tests both stable Rust and the minimum supported Rust version.
 - Each released CPython/platform wheel is installed and tested on its native

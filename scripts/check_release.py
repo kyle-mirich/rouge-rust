@@ -70,6 +70,11 @@ def main():
                 "LICENSE",
                 "fast_rouge.pyi",
                 "tests/test_parity.py",
+                "tests/test_semantics.py",
+                "tests/test_tools.py",
+                "benchmark.py",
+                "examples/score_jsonl.py",
+                "examples/pairs.jsonl",
                 "docs/api.md",
             ]:
                 if prefix + required not in names:
