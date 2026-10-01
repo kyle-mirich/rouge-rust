@@ -14,7 +14,8 @@ RAYON_NUM_THREADS=1 .venv/bin/python benchmark.py --pairs 10000 --repeats 5 --js
 ## Method
 
 The harness uses a seeded random generator and a fixed 24-word ASCII vocabulary.
-The seed defaults to zero and is configurable with `--seed`. By default, each reference contains 6–18 tokens. Roughly a quarter of positions
+The seed defaults to zero and is configurable with `--seed`. By default, each
+reference contains 6–18 tokens. Roughly a quarter of positions
 are selected for replacement to create its prediction; replacement can choose
 the same token or revisit a position. This is a synthetic short-text workload,
 not a representative natural-language corpus.
@@ -22,9 +23,9 @@ not a representative natural-language corpus.
 Every path is warmed up on up to 100 pairs before timing. Three repeats are the
 default; use at least five so each of the five paths occupies every timing
 position once. The order rotates by one position each repeat to reduce systematic
-order bias; it does not eliminate thermal effects or background-load noise. Reported
-timings are medians and exclude input generation, result validation, and result
-destruction. The measurements include:
+order bias; it does not eliminate thermal effects or background-load noise.
+Reported timings are medians and exclude input generation, result validation,
+and result destruction. The measurements include:
 
 1. A Python loop over `rouge-score` with stemming disabled.
 2. A Python loop over `score`, including per-call GIL transitions and results.
@@ -67,8 +68,8 @@ maximum length. `--help` lists all options.
 This compares a sequential Python implementation with parallel native code; it
 measures both implementation efficiency and parallelism when more than one
 Rayon worker is enabled. Run `RAYON_NUM_THREADS=1` as well as a fixed multi-worker
-setting to distinguish them. Tiny batches may not
-amortize thread scheduling and allocation. Long sequences are dominated by LCS.
+setting to distinguish them. Tiny batches may not amortize thread scheduling and
+allocation. Long sequences are dominated by LCS.
 Flat results defer Python allocation, so use the materialized timing when your
 application will consume all columns. If it needs one column, measure that path.
 
@@ -76,3 +77,7 @@ Do not generalize a speedup from this workload to all datasets. When proposing
 an optimization, report before/after timings with identical hardware, inputs,
 Python version, build mode, thread count, and repeat count. Also run the parity
 suite; speed is useful only if scores stay correct.
+
+[Benchmark verification and measurement limits](benchmark-results.md) record
+validated input fingerprints and explain why shared-workstation experiments in
+this pass are not used for performance claims.

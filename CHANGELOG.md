@@ -11,6 +11,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - Hand-counted metric regressions, exhaustive reference checks on 961 ordered
   token-sequence pairs in all Python APIs, and a ROUGE-L/ROUGE-Lsum distinction test.
 - Explicit scoring/normalization contract and reference settings documentation.
+- Short/long/tiny benchmark validation with input hashes and measurement limits,
+  plus a portfolio brief linking supporting evidence; no timing claim under load.
 
 ### Changed
 

@@ -7,8 +7,8 @@
 
 Fast **ROUGE-1, ROUGE-2, and ROUGE-L** scoring for Python, implemented in Rust.
 Evaluate one pair or a batch, targeting the numerical results of Google's
-[`rouge-score`](https://github.com/google-research/google-research/tree/master/rouge)
-`rouge-score==0.1.2` for these metrics with stemming disabled and its default
+[`rouge-score` 0.1.2](https://github.com/google-research/google-research/tree/master/rouge)
+for these metrics with stemming disabled and its default
 tokenizer. [Correctness evidence and variant definitions](docs/correctness.md)
 describe the tested settings and boundaries.
 
@@ -24,6 +24,7 @@ describe the tested settings and boundaries.
 
 Try the [runnable JSONL demo](docs/demo.md) to see complete, shortened, reordered,
 and empty predictions evaluated without an external service.
+The [project brief](docs/project-brief.md) links implementation and verification evidence.
 
 ## Install
 
@@ -111,6 +112,12 @@ flat scoring both before and after copying all nine columns to Python lists.
 Hardware, input length, and thread count
 matter; [the methodology](https://github.com/kyle-mirich/rouge-rust/blob/main/docs/benchmarking.md) explains how to reproduce and
 interpret results.
+
+[Benchmark verification](docs/benchmark-results.md) records validated short,
+long, and single-pair workloads with reproducible input fingerprints. Timing
+experiments in this pass ran on a busy shared workstation, so they support no
+public performance claim. Use the methodology to measure your workload under
+controlled conditions before choosing an API or reporting a speedup.
 
 ## Develop
 
