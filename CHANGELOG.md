@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- Runnable JSONL evaluation example with bounded batches, structured scores,
+  input validation, and subprocess tests; include tools in the source distribution.
+- Hand-counted metric regressions, exhaustive reference checks on 961 ordered
+  token-sequence pairs in all Python APIs, and a ROUGE-L/ROUGE-Lsum distinction test.
+- Explicit scoring/normalization contract and reference settings documentation.
+
+### Changed
+
+- Benchmark all three APIs, rotate timing order, validate every output path,
+  and optionally save raw samples, environment/commit metadata, and seeded input hashes.
+
+
 ## [0.1.12] - 2026-09-21
 
 ### Fixed

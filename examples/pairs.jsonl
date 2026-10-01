@@ -1,0 +1,4 @@
+{"id":"complete","reference":"The cat sat on the mat.","prediction":"The cat sat on the mat."}
+{"id":"omission","reference":"The cat sat on the mat.","prediction":"The cat sat."}
+{"id":"reordered","reference":"alpha beta gamma delta","prediction":"delta gamma beta alpha"}
+{"id":"empty","reference":"","prediction":""}

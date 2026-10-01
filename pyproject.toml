@@ -51,6 +51,8 @@ include = [
     { path = "docs/**", format = "sdist" },
     { path = "tests/**", format = "sdist" },
     { path = "scripts/**", format = "sdist" },
+    { path = "examples/**", format = "sdist" },
+    { path = "benchmark.py", format = "sdist" },
     { path = "fast_rouge.pyi", format = "sdist" },
 ]
 
