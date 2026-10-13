@@ -70,8 +70,9 @@ subject to this Actions-artifact retention policy.
 
 Rerun failed build/validation jobs before their input artifacts expire. For a
 non-release run with expired inputs, rerun the full workflow to rebuild them.
-For a tag run, complete approvals and any publication/release-job recovery within
-the 35-day window. If release artifacts have expired, inspect PyPI and the GitHub
+For a tag run, the 35-day retention covers long approval waits; start failed-job
+reruns within GitHub's 30-day window from the initial run. If release artifacts
+have expired, inspect PyPI and the GitHub
 Release first and follow the publication recovery guidance below; do not blindly
 rerun publishing or reuse an already published version.
 
