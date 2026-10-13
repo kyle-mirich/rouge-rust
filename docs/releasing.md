@@ -55,6 +55,29 @@ Actions are pinned to commit SHAs and tracked by Dependabot. Builds use the
 committed Cargo lockfile. Release runs cannot be canceled by a newer push.
 The checked build artifacts are passed to publication without rebuilding them.
 
+### Artifact retention
+
+The per-platform `packages-*` wheels and sdist are temporary inputs to the
+validation job and expire after **1 day**. All branches and pull requests still
+build, install, test, and validate the full distribution matrix. Ordinary CI runs
+do not upload a second copy of the distributions after validation.
+
+Only `v*` tag runs upload the validated `release-dist` bundle. It is retained for
+**35 days** so publication approvals and failed publication/release jobs can use
+the same validated files, including the possible 30-day environment approval
+wait. Published PyPI files and GitHub Release assets are not
+subject to this Actions-artifact retention policy.
+
+Rerun failed build/validation jobs before their input artifacts expire. For a
+non-release run with expired inputs, rerun the full workflow to rebuild them.
+For a tag run, complete approvals and any publication/release-job recovery within
+the 35-day window. If release artifacts have expired, inspect PyPI and the GitHub
+Release first and follow the publication recovery guidance below; do not blindly
+rerun publishing or reuse an already published version.
+
+These limits apply to newly uploaded artifacts. Existing artifacts keep their
+original expiry dates.
+
 ## Trusted publishing configuration
 
 The PyPI project must trust this GitHub publisher:
