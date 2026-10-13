@@ -124,6 +124,8 @@ jobs:
         with:
           name: packages-${{ matrix.platform.name }}-py${{ matrix.python-version }}
           path: dist/*.whl
+          # Only needed to transfer tested wheels to the validation job.
+          retention-days: 1
           if-no-files-found: error
 
   sdist:
@@ -152,6 +154,8 @@ jobs:
         with:
           name: packages-sdist
           path: dist/*.tar.gz
+          # Only needed to transfer the tested sdist to the validation job.
+          retention-days: 1
           if-no-files-found: error
 
   validate:
@@ -176,10 +180,14 @@ jobs:
           python -m pip install twine
           python -m twine check --strict dist/*
           python scripts/check_release.py --dist dist --complete
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - name: Upload validated distributions for publishing
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: release-dist
           path: dist/*
+          # Allow time for release approval and publication/release-job retries.
+          retention-days: 35
           if-no-files-found: error
 
   publish:
