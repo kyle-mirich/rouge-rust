@@ -108,7 +108,7 @@ jobs:
           python -m pip install --no-index --find-links dist rouge-rust --force-reinstall
           python -m pip install pytest rouge-score==0.1.2
           python -m pytest -q
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: packages-${{ matrix.platform.name }}-py${{ matrix.python-version }}
           path: dist/*.whl
@@ -138,7 +138,7 @@ jobs:
         run: |
           python -m pip install dist/*.tar.gz pytest rouge-score==0.1.2
           python -m pytest -q
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: packages-sdist
           path: dist/*.tar.gz
@@ -170,7 +170,7 @@ jobs:
           python scripts/check_release.py --dist dist --complete --platforms linux-x86_64 linux-aarch64 windows-x64
       - name: Upload validated distributions for publishing
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-dist
           path: dist/*
