@@ -1,6 +1,6 @@
 # rouge-rust
 
-[![CI](https://github.com/kyle-mirich/rouge-rust/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/kyle-mirich/rouge-rust/actions/workflows/release.yml)
+[![Release](https://github.com/kyle-mirich/rouge-rust/actions/workflows/release.yml/badge.svg)](https://github.com/kyle-mirich/rouge-rust/actions/workflows/release.yml)
 [![PyPI](https://img.shields.io/pypi/v/rouge-rust)](https://pypi.org/project/rouge-rust/)
 [![Python](https://img.shields.io/pypi/pyversions/rouge-rust)](https://pypi.org/project/rouge-rust/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/kyle-mirich/rouge-rust/blob/main/LICENSE)

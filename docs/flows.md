@@ -50,7 +50,7 @@ limits appropriate to their workloads.
   concurrent Python callers with a deadlock timeout.
 - Hand-counted examples and all 961 short binary text pairs exercise the installed
   production path through all three APIs; see [correctness.md](correctness.md).
-- CI checks formatting, Clippy, Python lint, Rust documentation, and installed
+- Release CI checks formatting, Clippy, Python lint, Rust documentation, and installed
   type stubs. It tests both stable Rust and the minimum supported Rust version.
 - Each released CPython/platform wheel is installed and tested on its native
   platform. The source distribution is also built, installed, and tested.

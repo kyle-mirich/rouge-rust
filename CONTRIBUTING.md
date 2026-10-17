@@ -6,7 +6,7 @@ are welcome. Please follow the [code of conduct](CODE_OF_CONDUCT.md).
 ## Development setup
 
 Install Rust 1.88+, a C linker, Python, and [uv](https://docs.astral.sh/uv/).
-Python 3.13 is a convenient development default; CI tests CPython 3.8–3.14.
+Python 3.13 is a convenient development default; release CI tests CPython 3.8–3.14.
 
 ```bash
 git clone https://github.com/kyle-mirich/rouge-rust.git
@@ -18,6 +18,21 @@ uv pip install -e '.[dev]'
 Re-run `uv pip install -e '.[dev]'` after modifying Rust code. An already-imported
 extension stays loaded, so restart Python or your notebook kernel after rebuilding.
 No service credentials or datasets are needed for development.
+
+## Local macOS builds
+
+Normal pull requests and branch pushes do not run CI. On your Mac, build and test
+a release-mode wheel for the current architecture with:
+
+```bash
+bash scripts/build-macos.sh
+```
+
+This uses an isolated `.venv-macos` environment (Python 3.13 by default), installs
+and tests the newly built wheel, and saves it under `dist/local-macos.*`. Set
+`PYTHON_VERSION` when first creating the environment to choose another installed
+Python version. It does not publish artifacts or build the other Mac architecture.
+Run the checks below before submitting changes.
 
 ## Verification
 

@@ -26,8 +26,10 @@ virtual environment and run the Python tests there. Also build/install the sdist
 in a separate environment. Inspect the wheel for its type stubs and `py.typed`;
 the script checks both, along with essential source-distribution files.
 
-6. Commit and push `main`. Wait for the full CI workflow to succeed.
-7. Create and push **only the new tag** on that validated commit:
+6. Commit and push `main` after local validation. Branch pushes and pull requests
+   do not run CI; use `bash scripts/build-macos.sh` for a native macOS wheel test.
+7. Create and push **only the new tag** on that locally validated commit. The tag
+   starts the full release validation and publishing workflow:
 
 ```bash
 git tag -a v0.1.12 -m "Release 0.1.12"
@@ -39,7 +41,8 @@ plus the Cargo package version; CI rejects mismatches before publication.
 
 ## CI gates
 
-The workflow in `.github/workflows/release.yml` performs:
+The workflow in `.github/workflows/release.yml` runs only when a `v*` tag is pushed.
+It performs:
 
 - Rust formatting, Clippy, tests, documentation, and minimum-Rust-version checks.
 - Python lint/format checks, parity/API tests, and installed-stub validation.
@@ -58,9 +61,8 @@ The checked build artifacts are passed to publication without rebuilding them.
 ### Artifact retention
 
 The per-platform `packages-*` wheels and sdist are temporary inputs to the
-validation job and expire after **1 day**. All branches and pull requests still
-build, install, test, and validate the full distribution matrix. Ordinary CI runs
-do not upload a second copy of the distributions after validation.
+validation job and expire after **1 day**. Release tags build, install, test, and
+validate the full distribution matrix. Branches and pull requests do not run CI.
 
 Only `v*` tag runs upload the validated `release-dist` bundle. It is retained for
 **35 days** so publication approvals and failed publication/release jobs can use
@@ -69,8 +71,7 @@ wait. Published PyPI files and GitHub Release assets are not
 subject to this Actions-artifact retention policy.
 
 Rerun failed build/validation jobs before their input artifacts expire. For a
-non-release run with expired inputs, rerun the full workflow to rebuild them.
-For a tag run, the 35-day retention covers long approval waits; start failed-job
+tag run, the 35-day retention covers long approval waits; start failed-job
 reruns within GitHub's 30-day window from the initial run. If release artifacts
 have expired, inspect PyPI and the GitHub
 Release first and follow the publication recovery guidance below; do not blindly
