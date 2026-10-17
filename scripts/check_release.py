@@ -10,12 +10,20 @@ from pathlib import Path
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
+PLATFORMS = ["linux-aarch64", "linux-x86_64", "macos-arm64", "macos-x86_64", "windows-x64"]
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dist", type=Path, help="directory of built wheels and sdist")
-    parser.add_argument("--complete", action="store_true", help="require all 35 CPython wheels")
+    parser.add_argument("--complete", action="store_true", help="require CPython 3.8–3.14 wheels")
+    parser.add_argument(
+        "--platforms",
+        nargs="+",
+        choices=PLATFORMS,
+        default=PLATFORMS,
+        help="platforms required by --complete (default: all five)",
+    )
     args = parser.parse_args()
     if args.complete and not args.dist:
         parser.error("--complete requires --dist")
@@ -81,15 +89,7 @@ def main():
                     raise SystemExit(f"Missing {required} in sdist")
         if args.complete:
             expected = {
-                (f"cp3{minor}", target)
-                for minor in range(8, 15)
-                for target in [
-                    "linux-aarch64",
-                    "linux-x86_64",
-                    "macos-arm64",
-                    "macos-x86_64",
-                    "windows-x64",
-                ]
+                (f"cp3{minor}", target) for minor in range(8, 15) for target in args.platforms
             }
             if actual != expected or len(wheels) != len(expected):
                 raise SystemExit(

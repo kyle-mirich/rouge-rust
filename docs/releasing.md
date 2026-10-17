@@ -29,7 +29,7 @@ the script checks both, along with essential source-distribution files.
 6. Commit and push `main` after local validation. Branch pushes and pull requests
    do not run CI; use `bash scripts/build-macos.sh` for a native macOS wheel test.
 7. Create and push **only the new tag** on that locally validated commit. The tag
-   starts the full release validation and publishing workflow:
+   starts the Linux/Windows release validation and publishing workflow:
 
 ```bash
 git tag -a v0.1.12 -m "Release 0.1.12"
@@ -46,10 +46,10 @@ It performs:
 
 - Rust formatting, Clippy, tests, documentation, and minimum-Rust-version checks.
 - Python lint/format checks, parity/API tests, and installed-stub validation.
-- Native build/install/test jobs for CPython 3.8–3.14 on five targets: Linux
-  x86-64, Linux ARM64, macOS Intel, macOS ARM64, and Windows x64 (35 wheels).
+- Native build/install/test jobs for CPython 3.8–3.14 on three targets: Linux
+  x86-64, Linux ARM64, and Windows x64 (21 wheels). GitHub runs no macOS jobs.
 - Source-distribution installation and Python tests.
-- Strict distribution metadata validation and a complete wheel-matrix check.
+- Strict distribution metadata validation and a complete Linux/Windows wheel-matrix check.
 - PyPI trusted publishing only for tags and only after every gate passes.
 - A GitHub Release only after PyPI publishing succeeds, with changelog notes
   and SHA-256 checksums.
@@ -58,11 +58,54 @@ Actions are pinned to commit SHAs and tracked by Dependabot. Builds use the
 committed Cargo lockfile. Release runs cannot be canceled by a newer push.
 The checked build artifacts are passed to publication without rebuilding them.
 
+## Local macOS release wheels
+
+macOS wheels are built and tested locally, then uploaded separately for the same
+release version. The automated release publishes the 21 Linux/Windows wheels and
+sdist; it does not wait for macOS uploads.
+
+On each Mac architecture you intend to publish, check out the exact release tag
+with a clean working tree, then run:
+
+```bash
+# Example; use the actual new release tag, never move an existing tag.
+git switch --detach v0.1.12
+bash scripts/build-macos.sh 3.8 3.9 3.10 3.11 3.12 3.13 3.14
+```
+
+The script builds and tests each wheel on that Mac's native architecture, using
+separate Python environments. An Apple Silicon Mac produces ARM64 wheels; use an
+Intel Mac for tested x86-64 wheels. It does not cross-compile or run a hosted Mac.
+Until an architecture's wheels are uploaded, users of that architecture may fall
+back to building from the sdist. Do not describe an untested architecture as tested.
+
+After the automated release succeeds, use the output directory printed by the
+script (substitute its exact path below):
+
+```bash
+uvx --from twine twine check --strict dist/local-macos.XXXXXX/*.whl
+uvx --from twine twine upload dist/local-macos.XXXXXX/*.whl
+gh release upload v0.1.12 dist/local-macos.XXXXXX/*.whl
+```
+
+Twine requires locally configured PyPI credentials; GitHub's OIDC publisher does
+not authenticate local uploads. Keep credentials out of scripts and the repository.
+Inspect existing PyPI files before retrying and never overwrite a published wheel.
+After adding Mac wheels, download **all** release wheels and the sdist into a fresh
+directory, regenerate `SHA256SUMS` across them, and replace only the release's
+checksum asset with `gh release upload TAG SHA256SUMS --clobber`. This keeps the
+checksum file complete for both hosted and local artifacts.
+
+`scripts/check_release.py --dist DIRECTORY --complete` still validates all 35
+wheels when both Mac architectures are available. Hosted CI selects only its
+three platforms with `--complete --platforms linux-x86_64 linux-aarch64 windows-x64`.
+
 ### Artifact retention
 
 The per-platform `packages-*` wheels and sdist are temporary inputs to the
 validation job and expire after **1 day**. Release tags build, install, test, and
-validate the full distribution matrix. Branches and pull requests do not run CI.
+validate the Linux/Windows distribution matrix. Locally built Mac wheels are not
+stored as Actions artifacts. Branches and pull requests do not run CI.
 
 Only `v*` tag runs upload the validated `release-dist` bundle. It is retained for
 **35 days** so publication approvals and failed publication/release jobs can use

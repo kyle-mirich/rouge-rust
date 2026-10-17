@@ -28,10 +28,12 @@ a release-mode wheel for the current architecture with:
 bash scripts/build-macos.sh
 ```
 
-This uses an isolated `.venv-macos` environment (Python 3.13 by default), installs
-and tests the newly built wheel, and saves it under `dist/local-macos.*`. Set
-`PYTHON_VERSION` when first creating the environment to choose another installed
-Python version. It does not publish artifacts or build the other Mac architecture.
+This uses an isolated `.venv-macos-3.13` environment, installs and tests the newly
+built wheel, and saves it under `dist/local-macos.*`. Pass Python versions as
+arguments to build more than one, for example `bash scripts/build-macos.sh 3.12 3.13`.
+Each version gets its own environment. It does not publish artifacts or build the
+other Mac architecture. GitHub never builds macOS wheels, including on releases;
+see the [release guide](docs/releasing.md) for local release builds and uploads.
 Run the checks below before submitting changes.
 
 ## Verification

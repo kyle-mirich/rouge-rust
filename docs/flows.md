@@ -53,6 +53,7 @@ limits appropriate to their workloads.
 - Release CI checks formatting, Clippy, Python lint, Rust documentation, and installed
   type stubs. It tests both stable Rust and the minimum supported Rust version.
 - Each released CPython/platform wheel is installed and tested on its native
-  platform. The source distribution is also built, installed, and tested.
+  platform: Linux and Windows in release CI, macOS locally. The source
+  distribution is also built, installed, and tested.
 
 See [releasing.md](releasing.md) for the publication gates and recovery process.

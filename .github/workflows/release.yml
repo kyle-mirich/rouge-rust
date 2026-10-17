@@ -88,14 +88,6 @@ jobs:
             runner: windows-latest
             target: x64
             args: --release --locked --out dist -i python
-          - name: macos-x86_64
-            runner: macos-15-intel
-            target: x86_64
-            args: --release --locked --out dist -i python
-          - name: macos-arm64
-            runner: macos-14
-            target: aarch64
-            args: --release --locked --out dist -i python
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -171,11 +163,11 @@ jobs:
           pattern: packages-*
           merge-multiple: true
           path: dist
-      - name: Validate metadata, versions, typing files, and full wheel matrix
+      - name: Validate metadata, versions, typing files, and hosted wheel matrix
         run: |
           python -m pip install twine
           python -m twine check --strict dist/*
-          python scripts/check_release.py --dist dist --complete
+          python scripts/check_release.py --dist dist --complete --platforms linux-x86_64 linux-aarch64 windows-x64
       - name: Upload validated distributions for publishing
         if: startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

@@ -19,6 +19,9 @@ describe the tested settings and boundaries.
 - Tested wheels for CPython 3.8–3.14 on Linux (x86-64 and ARM64), macOS
   (Intel and Apple Silicon), and Windows x64.
 
+Release automation builds Linux and Windows wheels. macOS wheels are built and
+tested locally, then uploaded separately; see the [release guide](docs/releasing.md).
+
 [API reference](https://github.com/kyle-mirich/rouge-rust/blob/main/docs/api.md) · [Benchmarks](https://github.com/kyle-mirich/rouge-rust/blob/main/docs/benchmarking.md) ·
 [Architecture](https://github.com/kyle-mirich/rouge-rust/blob/main/docs/flows.md) · [Contributing](https://github.com/kyle-mirich/rouge-rust/blob/main/CONTRIBUTING.md) · [Changelog](https://github.com/kyle-mirich/rouge-rust/blob/main/CHANGELOG.md)
 
